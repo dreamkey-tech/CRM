@@ -1,0 +1,66 @@
+# ============================================
+# DreamKey CRM — Root Git Ignore
+# ============================================
+
+# Dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Next.js
+.next/
+out/
+.vercel/
+
+# Build output
+dist/
+build/
+coverage/
+
+# Cloudflare / Wrangler
+.wrangler/
+
+# TypeScript
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editors
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+.tmp/
+.temp/
+.cache/
+
+# Test / coverage
+.nyc_output/
+coverage/
+
+# Local database / development files
+*.sqlite
+*.sqlite3
+*.db
+
+# Generated files
+*.generated.*
