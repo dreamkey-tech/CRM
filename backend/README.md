@@ -19,3 +19,13 @@ Pass the `CloudflareBindings` as generics when instantiating `Hono`:
 // src/index.ts
 const app = new Hono<{ Bindings: CloudflareBindings }>()
 ```
+
+cd /home/jeet/projects/freelancing/dreamkey-crm/backend
+
+# Regenerate TypeScript types for PrismaClient
+npx prisma generate
+# or
+npm run prisma:generate
+
+# Push schema changes to your Neon database
+npx prisma db push

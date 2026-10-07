@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id           String     @id @default(uuid())
+  email        String     @unique
+  name         String?
+  passwordHash String
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  roles        UserRole[]
+  sessions     Session[]
+  brokers      Broker[]   @relation("BrokerPrimaryPartner")
+
+  @@map("users")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  token     String   @unique
+  userAgent String?
+  ipAddress String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model Role {
+  id          String           @id @default(uuid())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  users       UserRole[]
+  permissions RolePermission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(uuid())
+  name        String           @unique // e.g. "leads:read", "leads:create", "deals:delete", "users:manage", "*:*"
+  category    String           // e.g. "LEADS", "DEALS", "SETTINGS", "USERS", "ALL"
+  description String?
+  createdAt   DateTime         @default(now())
+
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model UserRole {
+  userId String
+  roleId String
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model WebsiteUser {
+  id               String               @id @default(uuid())
+  email            String               @unique
+  name             String?
+  emailVerified    Boolean              @default(false)
+  passwordHash     String?              // Nullable for users registered solely via Google
+  authProvider     String               @default("EMAIL") // "EMAIL" | "GOOGLE" | "BOTH"
+  lastAuthProvider String?              @default("EMAIL")
+  googleId         String?
+  isActive         Boolean              @default(true)
+  loginCount       Int                  @default(0)
+  lastLoginAt      DateTime?
+  lastActiveAt     DateTime?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  sessions         WebsiteUserSession[]
+
+  @@index([googleId])
+  @@map("website_users")
+}
+
+model WebsiteUserSession {
+  id         String      @id @default(uuid())
+  userId     String
+  token      String      @unique
+  userAgent  String?
+  ipAddress  String?
+  expiresAt  DateTime
+  createdAt  DateTime    @default(now())
+  lastUsedAt DateTime    @default(now())
+
+  user       WebsiteUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("website_user_sessions")
+}
+
+model WebsiteEnquiry {
+  id                   String   @id @default(uuid())
+  fullName             String
+  mobileNo             String
+  email                String
+  propertyType         String
+  preferredLocation    String
+  estimatedBudgetBand  String
+  specificRequirements String?
+  status               String   @default("NEW") // "NEW" | "IN_PROGRESS" | "CONTACTED" | "RESOLVED" | "CLOSED"
+  notes                String?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([email])
+  @@index([mobileNo])
+  @@index([status])
+  @@map("website_enquiries")
+}
+
+enum BrokerStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+model Broker {
+  id                      String       @id @default(uuid())
+  name                    String
+  phone                   String?
+  email                   String?
+  whatsappNumber          String?
+  areaOfOperation         String?
+  primaryContactPartnerId String?
+  minDealValue            Float?       // Minimum deal value typically handled
+  maxDealValue            Float?       // Maximum deal value typically handled
+  societyExpertise        String[]     @default([]) // List of societies or localities where broker has strong connections
+  status                  BrokerStatus @default(ACTIVE)
+  notes                   String?
+  createdAt               DateTime     @default(now())
+  updatedAt               DateTime     @updatedAt
+
+  primaryContactPartner   User?        @relation("BrokerPrimaryPartner", fields: [primaryContactPartnerId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([phone])
+  @@index([email])
+  @@index([primaryContactPartnerId])
+  @@map("brokers")
+}
+
+

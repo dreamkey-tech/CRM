@@ -9,6 +9,12 @@
       "ESNext"
     ],
     "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx"
+    "jsxImportSource": "hono/jsx",
+    "types": ["node"]
   },
+  "include": [
+    "src/**/*",
+    "worker-configuration.d.ts",
+    "prisma.config.ts"
+  ]
 }

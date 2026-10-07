@@ -1,26 +1,106 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, [data-theme="dark"], .dark *));
+
 :root {
-  --background: #ffffff;
+  /* ── Core Brand Palette ── */
+  --color-deep-black: #0B0B0B;
+  --color-black: #111111;
+  --color-dark-surface: #171717;
+  --color-gold: #D4AF37;
+  --color-light-gold: #E6C75A;
+  --color-dark-gold: #B89628;
+  --color-white: #FFFFFF;
+  --color-off-white: #F8F8F6;
+  --color-text-dark: #171717;
+  --color-muted-text: #6B7280;
+  --color-border-light: #E5E7EB;
+
+  /* ── Light Theme Semantic Tokens ── */
+  --background: #FFFFFF;
+  --surface: #FFFFFF;
+  --surface-secondary: #F8F8F6;
+  --surface-card: #FFFFFF;
   --foreground: #171717;
+  --foreground-muted: #6B7280;
+  --border: #E5E7EB;
+  --border-subtle: #F3F4F6;
+  --primary: #D4AF37;
+  --primary-hover: #E6C75A;
+  --primary-foreground: #111111;
+  --ring: #D4AF37;
+}
+
+/* ── Dark Theme Semantic Tokens ── */
+.dark,
+[data-theme="dark"] {
+  --background: #0B0B0B;
+  --surface: #111111;
+  --surface-secondary: #171717;
+  --surface-card: #171717;
+  --foreground: #F8F8F6;
+  --foreground-muted: #9CA3AF;
+  --border: #262626;
+  --border-subtle: #1C1C1C;
+  --primary: #D4AF37;
+  --primary-hover: #E6C75A;
+  --primary-foreground: #0B0B0B;
+  --ring: #D4AF37;
 }
 
 @theme inline {
+  /* Brand Specific Colors */
+  --color-deep-black: var(--color-deep-black);
+  --color-black: var(--color-black);
+  --color-dark-surface: var(--color-dark-surface);
+  --color-gold: var(--color-gold);
+  --color-light-gold: var(--color-light-gold);
+  --color-dark-gold: var(--color-dark-gold);
+  --color-white: var(--color-white);
+  --color-off-white: var(--color-off-white);
+  --color-text-dark: var(--color-text-dark);
+  --color-muted-text: var(--color-muted-text);
+  --color-border-light: var(--color-border-light);
+
+  /* Semantic Variables */
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-secondary: var(--surface-secondary);
+  --color-surface-card: var(--surface-card);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+
+  /* Typography */
+  --font-sans: var(--font-inter), system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ── Global & Mobile WebView / APK Styles ── */
+* {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
 }
 
+html,
 body {
-  background: var(--background);
+  height: 100%;
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  overscroll-behavior-y: none;
+  touch-action: manipulation;
+}
+
+/* Safe area insets for mobile app notch/navigation bars */
+.safe-top {
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.safe-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
