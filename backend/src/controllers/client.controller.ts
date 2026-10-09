@@ -6,9 +6,7 @@ import { partnerSelect } from '../lib/directory'
 import { clientQuerySchema, type CreateClientInput, type UpdateClientInput, type AddClientShortlistInput, type UpdateClientShortlistInput, type CreateClientPropertyShareInput, type GenerateClientDocumentUploadUrlsInput, type AttachClientDocumentInput } from '../zod/client'
 import { publicPropertySnapshot, selectShareMedia, mediaSnapshot, randomShareToken, normalizeWhatsappNumber } from '../lib/client-sharing'
 import { signClientDocumentUpload, validateClientDocumentKey, verifyClientDocument, signClientDocumentDownload, removeClientDocumentObject } from '../lib/client-documents'
-import { GetObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
-import { getR2Client } from '../lib/r2'
+import { getR2PublicUrl } from '../lib/r2'
 import { publicPropertySnapshotSchema } from '../zod/client'
 import dreamkey from '../../../frontend/config/dreamkey-public.json'
 import { getClientDocumentRule } from '../config/media-config'
@@ -191,10 +189,18 @@ export async function publicClientShareController(c: Context<AppEnv>) {
   } })
   if (!share) throw new AppError('This property link could not be found.', 404, 'SHARE_NOT_FOUND')
   if (share.revokedAt || (share.expiresAt && share.expiresAt <= new Date()) || share.shortlistedProperty.property.isDraft || share.shortlistedProperty.property.isArchived) throw new AppError('This property link is no longer available. Please contact DreamKey for an updated listing.', 410, 'SHARE_UNAVAILABLE')
-  const media = await Promise.all(share.selectedMedia.filter(item => item.media.propertyId === share.propertyId && ['PHOTOGRAPH', 'VIDEO'].includes(item.media.category)).map(async (item) => ({ propertyMediaId: item.media.id, category: item.media.category, title: item.media.title,
-    url: await getSignedUrl(getR2Client(c.env), new GetObjectCommand({ Bucket: c.env.R2_BUCKET_NAME, Key: item.media.key }), { expiresIn: 3600 }),
-    thumbnailUrl: null, mimeType: item.media.mimeType, sizeBytes: item.media.sizeBytes, order: item.order,
-  })))
+  const media = share.selectedMedia
+    .filter(item => item.media.propertyId === share.propertyId && ['PHOTOGRAPH', 'VIDEO'].includes(item.media.category))
+    .map(item => ({
+      propertyMediaId: item.media.id,
+      category: item.media.category,
+      title: item.media.title,
+      url: item.media.url || ((c.env.R2_PUBLIC_URL || c.env.R2_PUBLIC_DOMAIN) && item.media.key ? getR2PublicUrl(c.env, item.media.key) : item.media.url),
+      thumbnailUrl: item.media.thumbnailUrl,
+      mimeType: item.media.mimeType,
+      sizeBytes: item.media.sizeBytes,
+      order: item.order,
+    }))
   return c.json({ success: true, property: publicPropertySnapshotSchema.parse(share.propertySnapshot), availabilityStatus: share.shortlistedProperty.property.availabilityStatus,
     media, company: dreamkey, contact: { name: dreamkey.name, phone: dreamkey.phone, email: dreamkey.email },
   })
