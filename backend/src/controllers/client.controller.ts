@@ -49,13 +49,38 @@ function cleanFields(body: CreateClientInput | UpdateClientInput) {
   const { assignedPartnerIds, ...fields } = body
   return { assignedPartnerIds, data: { ...fields, ...Object.fromEntries(['email', 'whatsappNumber', 'address', 'notes'].filter(key => fields[key as keyof typeof fields] === '').map(key => [key, null])) } }
 }
+function getFrontendOrigin(c: Context<AppEnv>): string {
+  if (c.env.FRONTEND_URL && !c.env.FRONTEND_URL.includes('localhost')) {
+    return c.env.FRONTEND_URL
+  }
+  const originHeader = typeof c.req?.header === 'function'
+    ? (c.req.header('origin') || c.req.header('referer'))
+    : undefined
+  if (originHeader) {
+    try {
+      const parsed = new URL(originHeader)
+      if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+        return parsed.origin
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return c.env.FRONTEND_URL || 'http://localhost:3000'
+}
+
 function publicUrl(c: Context<AppEnv>, token: string) {
-  const origin = new URL(c.env.FRONTEND_URL || 'http://localhost:3000')
+  const origin = new URL(getFrontendOrigin(c))
   return new URL(`/share/${token}`, origin).toString()
 }
+
 function shareResponse(c: Context<AppEnv>, share: ClientPropertyShare & { createdBy?: unknown }) {
   const { publicToken, ...record } = share
-  return { ...record, publicUrl: publicUrl(c, publicToken) }
+  const activeUrl = publicUrl(c, publicToken)
+  const normalizedMessage = record.message
+    ? record.message.replace(/https?:\/\/[^\s/]+\/share\/[a-f0-9]{64}/g, activeUrl)
+    : record.message
+  return { ...record, message: normalizedMessage, publicUrl: activeUrl }
 }
 export async function createClientController(c: Context<AppEnv>) {
   const user = actor(c), { assignedPartnerIds, data } = cleanFields(c.req.valid('json' as never) as CreateClientInput)
