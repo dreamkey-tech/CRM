@@ -15,9 +15,12 @@ model User {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
-  roles        UserRole[]
-  sessions     Session[]
-  brokers      Broker[]   @relation("BrokerPrimaryPartner")
+  roles                 UserRole[]
+  sessions              Session[]
+  brokers               Broker[]               @relation("BrokerPrimaryPartner")
+  propertiesAdded       Property[]             @relation("PropertySourcePartner")
+  propertyAuditLogs     PropertyAuditLog[]     @relation("PropertyAuditPartner")
+  propertyFilterPresets PropertyFilterPreset[]
 
   @@map("users")
 }
@@ -166,12 +169,167 @@ model Broker {
   updatedAt               DateTime     @updatedAt
 
   primaryContactPartner   User?        @relation("BrokerPrimaryPartner", fields: [primaryContactPartnerId], references: [id], onDelete: SetNull)
+  properties              Property[]   @relation("BrokerProperties")
 
   @@index([status])
   @@index([phone])
   @@index([email])
   @@index([primaryContactPartnerId])
   @@map("brokers")
+}
+
+// ==========================================
+// PROPERTY & MEDIA SCHEMA
+// ==========================================
+
+enum PropertyType {
+  FLAT
+  LAND
+  WAREHOUSE
+  COMMERCIAL
+  OTHER
+}
+
+enum PropertyPricingType {
+  SALE
+  RENT
+}
+
+enum PropertyListingStatus {
+  AVAILABLE
+  UNDER_NEGOTIATION
+  TOKEN_PAID
+  DEAL_DONE
+  RENTED_OUT
+  SOLD
+  UPCOMING
+}
+
+enum PropertyAccessType {
+  DIRECT
+  BROKER // "+1 Broker"
+}
+
+enum PropertyMediaCategory {
+  PHOTOGRAPH
+  VIDEO
+  FLOOR_PLAN
+  BROCHURE
+  OTHER
+}
+
+model Property {
+  id                   String                @id @default(uuid())
+  isDraft              Boolean               @default(false)
+  isArchived           Boolean               @default(false)
+  archivedAt           DateTime?
+
+  // Mandatory listing fields
+  propertyType         PropertyType          @default(FLAT)
+  societyBuildingName  String
+  locationArea         String
+  pincode              String
+  city                 String                @default("Mumbai")
+  floorNumber          Int?
+  totalFloors          Int?
+  bedrooms             Int?
+  bathrooms            Int?
+  balconies            Int?
+  carpetAreaSqFt       Float
+  superBuiltUpAreaSqFt Float?
+  pricingType          PropertyPricingType   @default(SALE)
+  askingPrice          Float
+  availabilityStatus   PropertyListingStatus @default(AVAILABLE)
+  availabilityDate     DateTime?
+
+  // Access & Contact details
+  accessType           PropertyAccessType    @default(DIRECT)
+  brokerId             String?               // Foreign key to Broker (nullable, reassignable)
+  sourcePartnerId      String                // Foreign key to User (Partner who added listing)
+
+  // Society Insights sub-section
+  builderName          String?
+  yearOfConstruction   Int?
+  totalUnits           Int?
+  amenities            String[]              @default([]) // e.g. ["parking", "gym", "lift", "security", "power_backup"]
+  reraNumber           String?
+
+  // Additional details
+  notes                String?
+
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+
+  // Relations
+  sourcePartner        User                  @relation("PropertySourcePartner", fields: [sourcePartnerId], references: [id], onDelete: Restrict)
+  broker               Broker?               @relation("BrokerProperties", fields: [brokerId], references: [id], onDelete: SetNull)
+  media                PropertyMedia[]
+  auditLogs            PropertyAuditLog[]
+
+  @@index([propertyType])
+  @@index([availabilityStatus])
+  @@index([sourcePartnerId])
+  @@index([brokerId])
+  @@index([locationArea])
+  @@index([pincode])
+  @@index([isDraft])
+  @@index([isArchived])
+  @@map("properties")
+}
+
+model PropertyMedia {
+  id           String                @id @default(uuid())
+  propertyId   String
+  category     PropertyMediaCategory @default(PHOTOGRAPH)
+  title        String?
+  key          String                // R2 storage key (for deletion/management)
+  url          String                // Public CDN URL (for display)
+  thumbnailUrl String?               // Video/PDF preview thumbnail if applicable
+  mimeType     String
+  sizeBytes    Int
+  order        Int                   @default(0)
+  isCover      Boolean               @default(false)
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  property     Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([category])
+  @@map("property_media")
+}
+
+model PropertyAuditLog {
+  id          String   @id @default(uuid())
+  propertyId  String
+  userId      String
+  action      String   // e.g. "CREATED", "UPDATED", "STATUS_CHANGE", "MEDIA_ADDED", "MEDIA_REMOVED", "ARCHIVED", "RESTORED"
+  description String?
+  changes     Json?    // Diffs of old vs new values
+  createdAt   DateTime @default(now())
+
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user        User     @relation("PropertyAuditPartner", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("property_audit_logs")
+}
+
+model PropertyFilterPreset {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String   // e.g. "Bandra 2-3BHK under 4 Cr"
+  filters   Json     // JSON object storing applied filters
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("property_filter_presets")
 }
 
 

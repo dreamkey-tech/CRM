@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client'
-import { PrismaNeonHttp } from '@prisma/adapter-neon'
+import { PrismaNeon } from '@prisma/adapter-neon'
+import { neonConfig } from '@neondatabase/serverless'
 import { createMiddleware } from 'hono/factory'
 
 export type Bindings = {
@@ -8,6 +9,12 @@ export type Bindings = {
   GOOGLE_CLIENT_SECRET?: string
   BACKEND_URL?: string
   FRONTEND_URL?: string
+  R2_ACCOUNT_ID?: string
+  R2_ACCESS_KEY_ID?: string
+  R2_SECRET_ACCESS_KEY?: string
+  R2_BUCKET_NAME?: string
+  R2_PUBLIC_DOMAIN?: string
+  R2_PUBLIC_URL?: string
 }
 
 export type AuthUser = {
@@ -40,16 +47,20 @@ export type AppEnv = {
 }
 
 export function getPrisma(databaseUrl: string): PrismaClient {
-  const adapter = new PrismaNeonHttp(databaseUrl, {})
+  // Prisma may start transactions internally for writes and relation includes.
+  // Workers and current Node versions supply a native WebSocket constructor.
+  if (typeof WebSocket !== 'undefined') neonConfig.webSocketConstructor = WebSocket
+  const adapter = new PrismaNeon({ connectionString: databaseUrl })
   return new PrismaClient({ adapter })
 }
 
-/**
- * Hono middleware to automatically inject the singleton `prisma` client into `c.var.prisma` / `c.get('prisma')`
- */
+/** Create and close the database pool within one Worker request. */
 export const prismaMiddleware = createMiddleware<AppEnv>(async (c, next) => {
-  if (!c.var.prisma) {
-    c.set('prisma', getPrisma(c.env.DATABASE_URL))
+  const prisma = getPrisma(c.env.DATABASE_URL)
+  c.set('prisma', prisma)
+  try {
+    await next()
+  } finally {
+    await prisma.$disconnect()
   }
-  await next()
 })

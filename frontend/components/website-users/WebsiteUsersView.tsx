@@ -9,6 +9,7 @@ import { UsersTabContent } from './UsersTabContent'
 import { EnquiriesTabContent } from './EnquiriesTabContent'
 import { getWebsiteEnquiryStats } from '../../api/websiteEnquiries'
 import { getWebsiteUserStats } from '../../api/websiteUsers'
+import { Breadcrumb } from '../ui/Breadcrumb'
 
 export function WebsiteUsersView() {
   const { theme } = useThemeStore()
@@ -64,6 +65,14 @@ export function WebsiteUsersView() {
       <DashboardHeader />
 
       <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-20 pb-12 space-y-5">
+        {/* Breadcrumb Navigation */}
+        <Breadcrumb
+          items={[
+            { label: 'Home', href: '/dashboard' },
+            { label: 'User Management' },
+          ]}
+        />
+
         {/* Page Header */}
         <WebsiteUsersHeader activeTab={activeTab} isDark={isDark} />
 

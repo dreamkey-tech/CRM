@@ -102,6 +102,65 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
 })
 
 /**
+ * Optional Authentication Middleware
+ * If a valid session cookie is provided, populates `user`, `roles`, and `permissions`.
+ * If no cookie or expired, proceeds without blocking the request.
+ */
+export const optionalAuthMiddleware = createMiddleware<AppEnv>(async (c, next) => {
+  const token = getCookie(c, AUTH_COOKIE_NAME)
+
+  if (token) {
+    const prisma = c.get('prisma')
+    const session = await prisma.session.findUnique({
+      where: { token },
+      include: {
+        user: {
+          include: {
+            roles: {
+              include: {
+                role: {
+                  include: {
+                    permissions: {
+                      include: {
+                        permission: true,
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    })
+
+    if (session && session.expiresAt >= new Date() && session.user.isActive) {
+      const authUser: AuthUser = {
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        isActive: session.user.isActive,
+      }
+
+      const roles = session.user.roles.map((ur) => ur.role.name)
+      const permissionsSet = new Set<string>()
+      for (const userRole of session.user.roles) {
+        for (const rolePerm of userRole.role.permissions) {
+          permissionsSet.add(rolePerm.permission.name)
+        }
+      }
+
+      c.set('user', authUser)
+      c.set('roles', roles)
+      c.set('permissions', Array.from(permissionsSet))
+      c.set('sessionId', session.id)
+    }
+  }
+
+  await next()
+})
+
+/**
  * Permission Guard Middleware
  * Ensures the authenticated user has a specific atomic permission (or Super Admin `*:*` access).
  */

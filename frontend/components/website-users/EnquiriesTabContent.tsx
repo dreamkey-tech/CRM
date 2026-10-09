@@ -38,6 +38,7 @@ import type { PaginationMeta } from '../../types/websiteUsers'
 import { EnquiryStatusBadge } from './EnquiryStatusBadge'
 import { EnquiryCard } from './EnquiryCard'
 import { EnquiryDetailModal } from './EnquiryDetailModal'
+import { TableSkeleton } from '../ui/PageSkeleton'
 
 interface EnquiriesTabContentProps {
   formatDate: (dateStr: string) => string
@@ -59,10 +60,19 @@ export function EnquiriesTabContent({ formatDate, formatDateTime }: EnquiriesTab
   const [selectedEnquiry, setSelectedEnquiry] = useState<WebsiteEnquiry | null>(null)
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('ALL')
   const [sortBy] = useState('createdAt')
   const [sortOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
+
+  // Debounce search input by 400ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const fetchEnquiries = useCallback(
     async (isManualRefresh = false) => {
@@ -73,7 +83,7 @@ export function EnquiriesTabContent({ formatDate, formatDateTime }: EnquiriesTab
         const params: WebsiteEnquiryListParams = {
           page,
           limit: pagination.limit,
-          search,
+          search: debouncedSearch.trim() || undefined,
           status: statusFilter,
           sortBy,
           sortOrder,
@@ -89,7 +99,7 @@ export function EnquiriesTabContent({ formatDate, formatDateTime }: EnquiriesTab
         setIsRefreshing(false)
       }
     },
-    [page, pagination.limit, search, statusFilter, sortBy, sortOrder]
+    [page, pagination.limit, debouncedSearch, statusFilter, sortBy, sortOrder]
   )
 
   useEffect(() => {
@@ -98,6 +108,7 @@ export function EnquiriesTabContent({ formatDate, formatDateTime }: EnquiriesTab
 
   const handleSearchChange = (val: string) => {
     setSearch(val)
+    if (!val) setDebouncedSearch('')
     setPage(1)
   }
 
@@ -282,15 +293,27 @@ export function EnquiriesTabContent({ formatDate, formatDateTime }: EnquiriesTab
               {tab.label}
             </button>
           ))}
+          {debouncedSearch && (
+            <>
+              <div className="w-px h-4 bg-border mx-1" />
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-gold/10 text-[10px] font-bold uppercase tracking-wider text-gold shrink-0">
+                "{debouncedSearch}"
+                <button
+                  onClick={() => handleSearchChange('')}
+                  className="hover:text-foreground cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            </>
+          )}
         </div>
       </div>
 
       {/* ── Content ── */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-[320px] bg-surface border border-border">
-          <Loader2 className="w-6 h-6 animate-spin text-gold mb-3" />
-          <p className="text-xs font-medium text-muted-text uppercase tracking-wider">Loading enquiries...</p>
-        </div>
+        <TableSkeleton rows={pagination.limit || 8} columns={6} />
       ) : enquiries.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[320px] bg-surface border border-border text-center px-4 py-12">
           <div className="w-12 h-12 border border-border flex items-center justify-center mb-4">
@@ -298,7 +321,7 @@ export function EnquiriesTabContent({ formatDate, formatDateTime }: EnquiriesTab
           </div>
           <h3 className="font-bold text-sm text-foreground uppercase tracking-wider mb-1">No Enquiries Found</h3>
           <p className="text-xs text-muted-text max-w-xs">
-            {search || statusFilter !== 'ALL'
+            {debouncedSearch || statusFilter !== 'ALL'
               ? 'No enquiries matched your filters. Try adjusting your search or status filter.'
               : 'No customer enquiries have been submitted yet.'}
           </p>

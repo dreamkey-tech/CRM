@@ -1,0 +1,71 @@
+{
+  "property": {
+    "photographs": {
+      "key": "photographs",
+      "category": "PHOTOGRAPH",
+      "label": "Property Photographs",
+      "description": "High-resolution photos of living room, bedrooms, kitchen, bathrooms, views, etc.",
+      "maxCount": 10,
+      "maxMb": 6,
+      "allowedMimeTypes": [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/heic",
+        "image/heif"
+      ]
+    },
+    "videos": {
+      "key": "videos",
+      "category": "VIDEO",
+      "label": "Property Video Tours",
+      "description": "Walkthrough videos, drone shots, or reel tours.",
+      "maxCount": 5,
+      "maxMb": 100,
+      "allowedMimeTypes": [
+        "video/mp4",
+        "video/webm",
+        "video/quicktime",
+        "video/x-matroska"
+      ]
+    },
+    "floorPlans": {
+      "key": "floorPlans",
+      "category": "FLOOR_PLAN",
+      "label": "Floor Plan / Layout",
+      "description": "2D/3D floor layout plans and architectural drawings.",
+      "maxCount": 0,
+      "maxMb": 10,
+      "allowedMimeTypes": [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "application/pdf"
+      ]
+    },
+    "documents": [
+      {
+        "key": "brochure",
+        "category": "BROCHURE",
+        "label": "Society / Project Brochure",
+        "description": "Official builder brochure or society marketing pamphlet.",
+        "maxCount": 1,
+        "maxMb": 15,
+        "allowedMimeTypes": [
+          "application/pdf"
+        ]
+      },
+      {
+        "key": "other_document",
+        "category": "OTHER",
+        "label": "Additional Documents",
+        "description": "Other documentation, approvals, or legal clearance summaries.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf"
+        ]
+      }
+    ]
+  }
+}

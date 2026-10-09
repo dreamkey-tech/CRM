@@ -51,3 +51,7 @@ export const ownerApiClient = createApiClient('/owners')
 
 // 6. Admin — Website User Management API Client (/api/v1/admin/website-users)
 export const adminWebsiteUsersClient = createApiClient('/admin/website-users')
+
+// 7. Property Management & R2 Storage API Client (/api/v1/properties)
+export const propertyApiClient = createApiClient('/properties')
+

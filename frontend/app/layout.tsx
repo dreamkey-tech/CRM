@@ -2,6 +2,9 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { AuthProvider } from '../utils/AuthProvider'
+import { NavigationLoaderProvider } from '../context/NavigationLoaderContext'
+import { MediaUploadProvider } from '../context/MediaUploadContext'
+import { GlobalUploadDock } from '../components/properties/GlobalUploadDock'
 import { Toaster } from '../components/ui/sonner'
 
 const inter = Inter({
@@ -32,8 +35,13 @@ export default function RootLayout({
     <html lang="en" className={`${inter.variable} h-full antialiased dark`}>
       <body className="min-h-full flex flex-col bg-background text-foreground font-sans transition-colors duration-200">
         <AuthProvider>
-          {children}
-          <Toaster />
+          <NavigationLoaderProvider>
+            <MediaUploadProvider>
+              {children}
+              <GlobalUploadDock />
+              <Toaster />
+            </MediaUploadProvider>
+          </NavigationLoaderProvider>
         </AuthProvider>
       </body>
     </html>

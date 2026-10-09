@@ -63,6 +63,7 @@ import type {
   PaginationMeta,
   WebsiteUsersListParams,
 } from '../../types/websiteUsers'
+import { TableSkeleton } from '../ui/PageSkeleton'
 
 // Utility Helpers
 function formatRelativeTime(dateStr: string | null): string {
@@ -431,11 +432,20 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
   const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | ''>('')
   const [authProviderFilter, setAuthProviderFilter] = useState('')
   const [sortBy, setSortBy] = useState<'createdAt' | 'lastActiveAt' | 'loginCount' | 'name' | 'email'>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
+
+  // Debounce search input by 400ms
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const loadData = useCallback(async () => {
     setIsLoading(true)
@@ -445,7 +455,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
         getWebsiteUsersList({
           page,
           limit: pagination.limit,
-          search,
+          search: debouncedSearch.trim() || undefined,
           status: statusFilter,
           authProvider: authProviderFilter,
           sortBy,
@@ -462,7 +472,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [page, pagination.limit, search, statusFilter, authProviderFilter, sortBy, sortOrder, onTotalUsersUpdate])
+  }, [page, pagination.limit, debouncedSearch, statusFilter, authProviderFilter, sortBy, sortOrder, onTotalUsersUpdate])
 
   useEffect(() => {
     loadData()
@@ -525,7 +535,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
       <div className="bg-surface border border-border">
         <div className="flex items-stretch border-b border-border">
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-text" />
+            <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-text pointer-events-none" />
             <input
               type="text"
               value={search}
@@ -534,8 +544,22 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
                 setPage(1)
               }}
               placeholder="Search accounts by name, email..."
-              className="w-full pl-10 pr-4 py-3 bg-transparent text-xs text-foreground placeholder:text-muted-text/50 focus:outline-none"
+              className="w-full pl-10 pr-9 py-3 bg-transparent text-xs text-foreground placeholder:text-muted-text/50 focus:outline-none"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('')
+                  setDebouncedSearch('')
+                  setPage(1)
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-text hover:text-foreground transition-colors cursor-pointer"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
           <div className="flex items-center border-l border-border">
             <button
@@ -544,7 +568,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
                 loadData()
               }}
               disabled={isRefreshing}
-              className="h-full px-3 flex items-center gap-1.5 text-muted-text hover:text-foreground transition-colors text-[10px] font-bold uppercase tracking-wider"
+              className="h-full px-3.5 flex items-center gap-1.5 text-muted-text hover:text-foreground hover:bg-surface-secondary/50 transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-gold' : ''}`} />
               <span className="hidden sm:inline">Refresh</span>
@@ -576,15 +600,31 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
               {f.label}
             </button>
           ))}
+          {debouncedSearch && (
+            <>
+              <div className="w-px h-4 bg-border mx-1" />
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-gold/10 text-[10px] font-bold uppercase tracking-wider text-gold shrink-0">
+                "{debouncedSearch}"
+                <button
+                  onClick={() => {
+                    setSearch('')
+                    setDebouncedSearch('')
+                    setPage(1)
+                  }}
+                  className="hover:text-foreground cursor-pointer"
+                  title="Clear search"
+                >
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            </>
+          )}
         </div>
       </div>
 
       {/* Users Table */}
       {isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-[320px] bg-surface border border-border">
-          <Loader2 className="w-6 h-6 animate-spin text-gold mb-3" />
-          <p className="text-xs font-medium text-muted-text uppercase tracking-wider">Loading accounts...</p>
-        </div>
+        <TableSkeleton rows={pagination.limit || 8} columns={6} />
       ) : users.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[320px] bg-surface border border-border text-center px-4 py-12">
           <div className="w-12 h-12 border border-border flex items-center justify-center mb-4">

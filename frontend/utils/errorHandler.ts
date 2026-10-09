@@ -124,3 +124,15 @@ export function handleActionApiError(
   toast.error(toastTitle, message)
   return message
 }
+
+/**
+ * Throws a clean error message for async API calls
+ */
+export function handleApiError(error: unknown, context?: string): Error {
+  const message = getApiErrorMessage(
+    error,
+    context ? `Failed to ${context}. Please try again.` : undefined
+  )
+  return new Error(message)
+}
+

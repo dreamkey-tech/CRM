@@ -2,11 +2,11 @@
 
 import React, { useEffect, useState } from 'react'
 import Image from 'next/image'
-import { useRouter } from 'next/navigation'
+import { useRouter } from '../../context/NavigationLoaderContext'
 import {
   Building2,
   Users2,
-  Share2,
+  Handshake,
   KeyRound,
   WalletCards,
   CheckSquare2,
@@ -15,6 +15,8 @@ import {
 import { toast } from '../../utils/toast'
 import { useThemeStore } from '../../store/useThemeStore'
 import { getWebsiteUserStats } from '../../api/websiteUsers'
+import { getBrokerStats } from '../../api/brokers'
+import { getPropertyStats } from '../../api/properties'
 
 interface MenuModule {
   id: string
@@ -31,10 +33,20 @@ export function MenuModulesGrid() {
   const isDark = theme === 'dark'
   const router = useRouter()
   const [websiteUserCount, setWebsiteUserCount] = useState<number | null>(null)
+  const [brokerCount, setBrokerCount] = useState<number | null>(null)
+  const [propertyCount, setPropertyCount] = useState<number | null>(null)
 
   useEffect(() => {
     getWebsiteUserStats()
       .then((s) => setWebsiteUserCount(s.totalUsers))
+      .catch(() => {})
+
+    getBrokerStats()
+      .then((s) => setBrokerCount(s.totalBrokers))
+      .catch(() => {})
+
+    getPropertyStats()
+      .then((s) => setPropertyCount(s.totalProperties))
       .catch(() => {})
   }, [])
 
@@ -43,9 +55,13 @@ export function MenuModulesGrid() {
       id: 'properties',
       title: 'Properties',
       description: 'Manage property stock, inventory lifecycle, and asset verification.',
-      badge: '128 Units • Flats, Land, Commercial',
+      badge:
+        propertyCount !== null
+          ? `${propertyCount.toLocaleString()} Units • Flats, Land, Comm.`
+          : 'Stock & Inventory',
       icon: Building2,
       image: 'Golden Hour Modern Villa Retreat.png',
+      href: '/dashboard/properties',
     },
     {
       id: 'clients',
@@ -59,9 +75,13 @@ export function MenuModulesGrid() {
       id: 'brokers',
       title: 'Brokers',
       description: 'Broker network, co-broking commissions, and agency channel partners.',
-      badge: '42 Certified Partners',
-      icon: Share2,
+      badge:
+        brokerCount !== null
+          ? `${brokerCount.toLocaleString()} Registered Partners`
+          : 'Channel Partners',
+      icon: Handshake,
       image: 'Golden-Hour Real Estate Deal.png',
+      href: '/dashboard/brokers',
     },
     {
       id: 'owners',

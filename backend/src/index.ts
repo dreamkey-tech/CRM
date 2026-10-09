@@ -7,6 +7,8 @@ import {userRoutes} from "./routes/website-user"
 import { roleRoutes } from './routes/roles'
 import { adminWebsiteUserRoutes } from './routes/admin-website-users'
 import { oauthRoutes } from './routes/oauth'
+import { brokerRoutes } from './routes/broker'
+import { propertyRoutes } from './routes/property'
 import { authMiddleware, requirePermission } from './middleware/auth'
 import { openApiSpec } from './lib/openapi'
 import { formatSystemError } from './lib/errors'
@@ -49,11 +51,13 @@ app.post(
 app.get('/openapi.json', (c) => c.json(openApiSpec))
 app.get('/docs', swaggerUI({ url: '/openapi.json' }))
 
-// 5. Mount API routes (/v1/auth/..., /v1/admin/..., /v1/user/..., /api/auth/...)
+// 5. Mount API routes (/v1/auth/..., /v1/admin/..., /v1/user/..., /v1/brokers, /v1/properties, /api/auth/...)
 app.route('/v1/auth', authRoutes)
 app.route('/v1/admin/website-users', adminWebsiteUserRoutes)
 app.route('/v1/admin', roleRoutes)
 app.route('/v1/user', userRoutes)
+app.route('/v1/brokers', brokerRoutes)
+app.route('/v1/properties', propertyRoutes)
 app.route('/api/auth', oauthRoutes)
 
 

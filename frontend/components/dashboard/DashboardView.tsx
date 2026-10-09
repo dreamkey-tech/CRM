@@ -11,19 +11,14 @@ import { CommandPaletteBar } from './CommandPaletteBar'
 import { DashboardFooter } from './DashboardFooter'
 import { useAuthStore } from '../../store/useAuthStore'
 
+import { PageSkeleton } from '../ui/PageSkeleton'
+
 export function DashboardView() {
   const { isLoading } = useAuthStore()
   const [activeTab, setActiveTab] = useState('Overview')
 
   if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background text-foreground text-xs font-mono">
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-surface border border-border shadow-md">
-          <div className="w-4 h-4 rounded-full border-2 border-gold border-t-transparent animate-spin" />
-          <span>Validating authenticated executive session...</span>
-        </div>
-      </div>
-    )
+    return <PageSkeleton variant="dashboard" maxWidthClass="max-w-9xl" />
   }
 
   return (
