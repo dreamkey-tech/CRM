@@ -5,6 +5,7 @@ import { AuthProvider } from '../utils/AuthProvider'
 import { NavigationLoaderProvider } from '../context/NavigationLoaderContext'
 import { MediaUploadProvider } from '../context/MediaUploadContext'
 import { GlobalUploadDock } from '../components/properties/GlobalUploadDock'
+import { ClientDocumentDock } from '../components/clients/ClientDocumentDock'
 import { Toaster } from '../components/ui/sonner'
 
 const inter = Inter({
@@ -39,6 +40,7 @@ export default function RootLayout({
             <MediaUploadProvider>
               {children}
               <GlobalUploadDock />
+              <ClientDocumentDock />
               <Toaster />
             </MediaUploadProvider>
           </NavigationLoaderProvider>

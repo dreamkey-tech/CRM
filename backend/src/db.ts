@@ -15,6 +15,7 @@ export type Bindings = {
   R2_BUCKET_NAME?: string
   R2_PUBLIC_DOMAIN?: string
   R2_PUBLIC_URL?: string
+  R2_CLIENT_DOCUMENTS_BUCKET?: string
 }
 
 export type AuthUser = {

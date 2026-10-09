@@ -163,6 +163,7 @@ export const createPropertyBaseSchema = z.object({
   // Access Type & Broker link
   accessType: propertyAccessTypeSchema.default('DIRECT'),
   brokerId: z.string().uuid().optional().nullable(),
+  ownerId: z.string().uuid().optional().nullable(),
 
   // Society Insights sub-section
   builderName: z.string().trim().max(120).optional().nullable(),
@@ -185,6 +186,10 @@ export const createPropertyBaseSchema = z.object({
 })
 
 export const createPropertySchema = createPropertyBaseSchema.superRefine((data, ctx) => {
+  if (data.ownerId && data.brokerId) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Link either an owner or a broker, not both.' })
+  if (data.accessType === 'BROKER' && data.ownerId) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Broker listings cannot link an owner.' })
+  if (data.accessType === 'DIRECT' && data.brokerId) ctx.addIssue({ code: 'custom', path: ['brokerId'], message: 'Owner listings cannot link a broker.' })
+  if (data.accessType === 'DIRECT' && !data.ownerId && !data.isDraft) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Please link an owner for a direct listing.' })
   // If accessType is BROKER and brokerId is not supplied
   if (data.accessType === 'BROKER' && !data.brokerId && !data.isDraft) {
     ctx.addIssue({
@@ -211,8 +216,13 @@ export const createPropertyDraftSchema = z.object({
   availabilityStatus: propertyListingStatusSchema.optional().default('AVAILABLE'),
   accessType: propertyAccessTypeSchema.optional().default('DIRECT'),
   brokerId: z.string().uuid().optional().nullable(),
+  ownerId: z.string().uuid().optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),
   media: z.array(propertyMediaItemSchema).optional().default([]),
+}).superRefine((data, ctx) => {
+  if (data.ownerId && data.brokerId) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Choose either an owner or a broker.' })
+  if (data.accessType === 'BROKER' && data.ownerId) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Broker listings cannot link an owner.' })
+  if (data.accessType === 'DIRECT' && data.brokerId) ctx.addIssue({ code: 'custom', path: ['brokerId'], message: 'Direct listings cannot link a broker.' })
 })
 
 // ==========================================
@@ -223,10 +233,19 @@ export const attachPropertyMediaSchema = z.object({
   media: z.array(propertyMediaItemSchema).min(1).max(30),
 })
 
-export const updatePropertySchema = createPropertyBaseSchema.partial().superRefine((data, ctx) => {
-  if (data.accessType === 'BROKER' && !data.brokerId && data.isDraft === false) {
-    ctx.addIssue({ code: 'custom', path: ['brokerId'], message: 'Please select a broker.' })
-  }
+export const updatePropertySchema = createPropertyBaseSchema.extend({
+  isDraft: createPropertyBaseSchema.shape.isDraft.removeDefault(),
+  propertyType: createPropertyBaseSchema.shape.propertyType.removeDefault(),
+  city: createPropertyBaseSchema.shape.city.removeDefault(),
+  pricingType: createPropertyBaseSchema.shape.pricingType.removeDefault(),
+  availabilityStatus: createPropertyBaseSchema.shape.availabilityStatus.removeDefault(),
+  accessType: createPropertyBaseSchema.shape.accessType.removeDefault(),
+  amenities: createPropertyBaseSchema.shape.amenities.removeDefault(),
+  media: createPropertyBaseSchema.shape.media.removeDefault(),
+}).partial().superRefine((data, ctx) => {
+  if (data.ownerId && data.brokerId) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Choose either an owner or a broker.' })
+  if (data.accessType === 'BROKER' && data.ownerId) ctx.addIssue({ code: 'custom', path: ['ownerId'], message: 'Broker listings cannot link an owner.' })
+  if (data.accessType === 'DIRECT' && data.brokerId) ctx.addIssue({ code: 'custom', path: ['brokerId'], message: 'Direct listings cannot link a broker.' })
 })
 
 
@@ -297,7 +316,8 @@ export const propertyFilterQuerySchema = z.object({
   sourcePartnerId: z.string().optional(), // single UUID or comma-separated
 
   // Broker filter
-  brokerId: z.string().optional(),
+  brokerId: z.string().uuid().optional(),
+  ownerId: z.string().uuid().optional(),
 
   // Carpet area range
   minCarpetArea: z.coerce.number().positive().optional(),

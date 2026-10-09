@@ -17,10 +17,18 @@ model User {
 
   roles                 UserRole[]
   sessions              Session[]
+  owners                Owner[]                @relation("OwnerPrimaryPartner")
+  ownersCreated         Owner[]                @relation("OwnerCreator")
   brokers               Broker[]               @relation("BrokerPrimaryPartner")
   propertiesAdded       Property[]             @relation("PropertySourcePartner")
   propertyAuditLogs     PropertyAuditLog[]     @relation("PropertyAuditPartner")
   propertyFilterPresets PropertyFilterPreset[]
+  clientsCreated        Client[]                    @relation("ClientCreator")
+  clientAssignments     ClientPartnerAssignment[]   @relation("ClientAssignedPartner")
+  clientAssignmentsMade ClientPartnerAssignment[]   @relation("ClientAssignmentCreator")
+  clientShortlistsAdded  ClientShortlistedProperty[] @relation("ClientShortlistCreator")
+  clientSharesCreated   ClientPropertyShare[]       @relation("ClientShareCreator")
+  clientDocumentsAdded  ClientDocument[]            @relation("ClientDocumentUploader")
 
   @@map("users")
 }
@@ -161,7 +169,6 @@ model Broker {
   areaOfOperation         String?
   primaryContactPartnerId String?
   minDealValue            Float?       // Minimum deal value typically handled
-  maxDealValue            Float?       // Maximum deal value typically handled
   societyExpertise        String[]     @default([]) // List of societies or localities where broker has strong connections
   status                  BrokerStatus @default(ACTIVE)
   notes                   String?
@@ -176,6 +183,213 @@ model Broker {
   @@index([email])
   @@index([primaryContactPartnerId])
   @@map("brokers")
+}
+
+enum OwnerStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model Owner {
+  id                      String      @id @default(uuid())
+  name                    String
+  phone                   String
+  email                   String?
+  whatsappNumber          String?
+  address                 String?
+  primaryContactPartnerId String?
+  createdById             String
+  notes                   String?
+  status                  OwnerStatus @default(ACTIVE)
+  createdAt               DateTime    @default(now())
+  updatedAt               DateTime    @updatedAt
+
+  primaryContactPartner User?      @relation("OwnerPrimaryPartner", fields: [primaryContactPartnerId], references: [id], onDelete: SetNull)
+  createdBy             User       @relation("OwnerCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  properties            Property[] @relation("OwnerProperties")
+
+  @@index([phone])
+  @@index([status])
+  @@index([primaryContactPartnerId])
+  @@index([createdById])
+  @@map("owners")
+}
+
+// ==========================================
+// CLIENT DIRECTORY (V1 — no lead pipeline yet)
+// ==========================================
+
+enum ClientStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ClientShortlistStatus {
+  SHORTLISTED
+  SHARED
+  VISITED
+  INTERESTED
+  NOT_INTERESTED
+}
+
+enum ClientShareChannel {
+  WHATSAPP
+  EMAIL
+  LINK
+}
+
+enum ClientShareStatus {
+  PREPARED
+  COMPOSER_OPENED
+  SENT_CONFIRMED
+}
+
+enum ClientDocumentCategory {
+  AADHAAR
+  PAYMENT_RECEIPT
+  CLIENT_DOCUMENT
+  PCC_APPLICATION
+  CERTIFICATE
+  KYC
+}
+
+model Client {
+  id             String       @id @default(uuid())
+  name           String
+  phone          String
+  email          String?
+  whatsappNumber String?
+  address        String?
+  notes          String?
+  status         ClientStatus @default(ACTIVE)
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  createdBy             User                        @relation("ClientCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  assignedPartners      ClientPartnerAssignment[]
+  shortlistedProperties ClientShortlistedProperty[]
+  documents             ClientDocument[]
+
+  @@index([phone])
+  @@index([email])
+  @@index([status])
+  @@index([createdById])
+  @@index([createdAt])
+  @@map("clients")
+}
+
+model ClientPartnerAssignment {
+  clientId     String
+  partnerId    String
+  assignedById String
+  assignedAt   DateTime @default(now())
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  partner    User   @relation("ClientAssignedPartner", fields: [partnerId], references: [id], onDelete: Restrict)
+  assignedBy User   @relation("ClientAssignmentCreator", fields: [assignedById], references: [id], onDelete: Restrict)
+
+  @@id([clientId, partnerId])
+  @@index([partnerId, clientId])
+  @@index([assignedById])
+  @@map("client_partner_assignments")
+}
+
+model ClientShortlistedProperty {
+  id         String                @id @default(uuid())
+  clientId   String
+  propertyId String
+  status     ClientShortlistStatus @default(SHORTLISTED)
+  notes      String?
+  addedById  String
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  client   Client                @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  property Property              @relation(fields: [propertyId], references: [id], onDelete: Restrict)
+  addedBy  User                  @relation("ClientShortlistCreator", fields: [addedById], references: [id], onDelete: Restrict)
+  shares   ClientPropertyShare[]
+
+  @@unique([clientId, propertyId])
+  @@unique([id, clientId, propertyId])
+  @@index([propertyId])
+  @@index([clientId, status])
+  @@index([addedById])
+  @@map("client_shortlisted_properties")
+}
+
+model ClientPropertyShare {
+  id                    String             @id @default(uuid())
+  shortlistedPropertyId String
+  clientId              String
+  propertyId            String
+  // Generate a cryptographically random token on the server, never from a client ID.
+  publicToken           String             @unique
+  channel               ClientShareChannel
+  status                ClientShareStatus  @default(PREPARED)
+  recipient             String?
+  subject               String?
+  message               String
+  // Whitelisted public listing fields only; never serialize a full Property/Client.
+  propertySnapshot      Json
+  // Historical selection metadata only, without URLs; public pages use live media relations.
+  selectedMediaSnapshot Json
+  createdById           String
+  composerOpenedAt      DateTime?
+  sentConfirmedAt       DateTime?
+  expiresAt             DateTime?
+  revokedAt             DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  shortlistedProperty ClientShortlistedProperty  @relation(fields: [shortlistedPropertyId, clientId, propertyId], references: [id, clientId, propertyId], onDelete: Restrict)
+  createdBy           User                       @relation("ClientShareCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  selectedMedia       ClientPropertyShareMedia[]
+
+  @@unique([id, propertyId])
+  @@index([clientId, createdAt])
+  @@index([propertyId])
+  @@index([shortlistedPropertyId, clientId, propertyId])
+  @@index([createdById])
+  @@map("client_property_shares")
+}
+
+model ClientPropertyShareMedia {
+  shareId         String
+  propertyMediaId String
+  propertyId      String
+  order           Int    @default(0)
+
+  // Composite references prevent selecting media from a different property.
+  share ClientPropertyShare @relation(fields: [shareId, propertyId], references: [id, propertyId], onDelete: Cascade)
+  media PropertyMedia       @relation(fields: [propertyMediaId, propertyId], references: [id, propertyId], onDelete: Cascade)
+
+  @@id([shareId, propertyMediaId])
+  @@index([shareId, propertyId])
+  @@index([propertyMediaId, propertyId])
+  @@map("client_property_share_media")
+}
+
+model ClientDocument {
+  id           String                 @id @default(uuid())
+  clientId     String
+  category     ClientDocumentCategory
+  title        String?
+  originalName String
+  // Store in a private bucket. A prefix within the public property bucket is not private.
+  key          String                 @unique
+  mimeType     String
+  sizeBytes    Int
+  uploadedById String
+  createdAt    DateTime               @default(now())
+  updatedAt    DateTime               @updatedAt
+
+  client     Client @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  uploadedBy User   @relation("ClientDocumentUploader", fields: [uploadedById], references: [id], onDelete: Restrict)
+
+  @@index([clientId, category])
+  @@index([uploadedById])
+  @@map("client_documents")
 }
 
 // ==========================================
@@ -244,6 +458,7 @@ model Property {
 
   // Access & Contact details
   accessType           PropertyAccessType    @default(DIRECT)
+  ownerId              String?
   brokerId             String?               // Foreign key to Broker (nullable, reassignable)
   sourcePartnerId      String                // Foreign key to User (Partner who added listing)
 
@@ -262,13 +477,16 @@ model Property {
 
   // Relations
   sourcePartner        User                  @relation("PropertySourcePartner", fields: [sourcePartnerId], references: [id], onDelete: Restrict)
+  owner                Owner?                @relation("OwnerProperties", fields: [ownerId], references: [id], onDelete: SetNull)
   broker               Broker?               @relation("BrokerProperties", fields: [brokerId], references: [id], onDelete: SetNull)
   media                PropertyMedia[]
   auditLogs            PropertyAuditLog[]
+  clientShortlists     ClientShortlistedProperty[]
 
   @@index([propertyType])
   @@index([availabilityStatus])
   @@index([sourcePartnerId])
+  @@index([ownerId])
   @@index([brokerId])
   @@index([locationArea])
   @@index([pincode])
@@ -293,6 +511,9 @@ model PropertyMedia {
   updatedAt    DateTime              @updatedAt
 
   property     Property              @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  clientShares ClientPropertyShareMedia[]
+
+  @@unique([id, propertyId])
 
   @@index([propertyId])
   @@index([category])

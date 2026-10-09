@@ -36,22 +36,15 @@ export const brokerFormSchema = z
       .trim()
       .max(250, 'Area of operation description is too long (max 250 characters).'),
     primaryContactPartnerId: z
-      .string()
+      .string().uuid('Please select a valid primary contact partner.')
       .nullable()
       .optional(),
     minDealValue: z
       .string()
       .optional()
       .refine(
-        (val) => !val || (!isNaN(Number(val)) && Number(val) >= 0),
+        (val) => !val || (Number.isFinite(Number(val)) && Number(val) >= 0),
         'Minimum deal value cannot be negative.'
-      ),
-    maxDealValue: z
-      .string()
-      .optional()
-      .refine(
-        (val) => !val || (!isNaN(Number(val)) && Number(val) >= 0),
-        'Maximum deal value cannot be negative.'
       ),
     societyExpertise: z
       .array(z.string().trim().min(1, 'Society name cannot be empty.')),
@@ -61,21 +54,4 @@ export const brokerFormSchema = z
       .trim()
       .max(2000, 'Notes cannot exceed 2000 characters.'),
   })
-  .refine(
-    (data) => {
-      const minVal = data.minDealValue
-      const maxVal = data.maxDealValue
-      const min = minVal && minVal.trim() !== '' ? Number(minVal) : null
-      const max = maxVal && maxVal.trim() !== '' ? Number(maxVal) : null
-      if (min !== null && max !== null && !isNaN(min) && !isNaN(max)) {
-        return max >= min
-      }
-      return true
-    },
-    {
-      message: 'Maximum deal value must be greater than or equal to minimum deal value.',
-      path: ['maxDealValue'],
-    }
-  )
-
 export type BrokerFormValues = z.infer<typeof brokerFormSchema>

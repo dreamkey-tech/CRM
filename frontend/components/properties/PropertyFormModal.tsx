@@ -1,5 +1,6 @@
 'use client'
 
+import { PropertyStatusSelect } from './PropertyStatusSelect'
 import React, { useState, useEffect, useRef, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -30,6 +31,7 @@ import { createPropertyDraft, updateProperty, getPropertyById, deleteProperty, d
 import { useMediaUpload } from '../../context/MediaUploadContext'
 import { PROPERTY_MEDIA_CONFIG, getMediaRuleForCategory } from '../../config/media-config'
 import { DeleteMediaConfirmModal } from './DeleteMediaConfirmModal'
+import { OwnerSelectModal } from './OwnerSelectModal'
 import { BrokerSelectModal } from './BrokerSelectModal'
 import { toast } from '../../utils/toast'
 import { handleFormApiError } from '../../utils/errorHandler'
@@ -94,6 +96,8 @@ export function PropertyFormModal({
   const [propertyId, setPropertyId] = useState<string>('')
   const currentPropertyIdRef = useRef(propertyId)
   useEffect(() => { currentPropertyIdRef.current = propertyId }, [propertyId])
+  const [isOwnerModalOpen, setIsOwnerModalOpen] = useState(false)
+  const [selectedOwner, setSelectedOwner] = useState<Property['owner']>(null)
   const [selectedBroker, setSelectedBroker] = useState<LinkedBroker | null>(null)
 
   // Media Management
@@ -145,6 +149,7 @@ export function PropertyFormModal({
       availabilityStatus: 'AVAILABLE',
       availabilityDate: '',
       accessType: 'DIRECT',
+      ownerId: null,
       brokerId: null,
       builderName: '',
       yearOfConstruction: '',
@@ -186,6 +191,7 @@ export function PropertyFormModal({
       // Opening the editor synchronizes its fields with the selected property.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setPropertyId(initialProperty.id)
+      setSelectedOwner(initialProperty.owner || null)
       setSelectedBroker(initialProperty.broker || null)
       setUploadedMedia(initialProperty.media || [])
       reset({
@@ -208,7 +214,8 @@ export function PropertyFormModal({
           ? new Date(initialProperty.availabilityDate).toISOString().split('T')[0]
           : '',
         accessType: initialProperty.accessType || 'DIRECT',
-        brokerId: initialProperty.broker?.id || null,
+        ownerId: initialProperty.ownerId || initialProperty.owner?.id || null,
+        brokerId: initialProperty.brokerId || initialProperty.broker?.id || null,
         builderName: initialProperty.builderName || '',
         yearOfConstruction: initialProperty.yearOfConstruction ? String(initialProperty.yearOfConstruction) : '',
         totalUnits: initialProperty.totalUnits ? String(initialProperty.totalUnits) : '',
@@ -223,6 +230,7 @@ export function PropertyFormModal({
         try {
           const parsed = JSON.parse(savedDraft)
           setPropertyId(parsed.propertyId || crypto.randomUUID())
+          setSelectedOwner(parsed.selectedOwner || null)
           setSelectedBroker(parsed.selectedBroker || null)
           setUploadedMedia(parsed.uploadedMedia || [])
           if (parsed.propertyId) {
@@ -253,6 +261,7 @@ export function PropertyFormModal({
             availabilityStatus: parsed.availabilityStatus || 'AVAILABLE',
             availabilityDate: parsed.availabilityDate || '',
             accessType: parsed.accessType || 'DIRECT',
+            ownerId: parsed.ownerId || null,
             brokerId: parsed.brokerId || null,
             builderName: parsed.builderName || '',
             yearOfConstruction: parsed.yearOfConstruction || '',
@@ -284,7 +293,8 @@ export function PropertyFormModal({
           availabilityStatus: 'AVAILABLE',
           availabilityDate: '',
           accessType: 'DIRECT',
-          brokerId: null,
+          ownerId: null,
+      brokerId: null,
           builderName: '',
           yearOfConstruction: '',
           totalUnits: '',
@@ -293,6 +303,7 @@ export function PropertyFormModal({
           notes: '',
         })
         setUploadedMedia([])
+        setSelectedOwner(null)
         setSelectedBroker(null)
       }
     }
@@ -307,6 +318,7 @@ export function PropertyFormModal({
       const draftData = {
         ...values,
         propertyId,
+        selectedOwner,
         selectedBroker,
         uploadedMedia,
         savedAt: new Date().toISOString(),
@@ -317,7 +329,7 @@ export function PropertyFormModal({
     const subscription = watch((values) => persistDraft(values as Partial<PropertyFormValues>))
 
     return () => subscription.unsubscribe()
-  }, [isOpen, initialProperty, watch, propertyId, selectedBroker, uploadedMedia, form])
+  }, [isOpen, initialProperty, watch, propertyId, selectedOwner, selectedBroker, uploadedMedia, form])
 
   const clearDraft = async () => {
     if (mediaBusy || isSubmitting || hasFailedUploads) return
@@ -336,6 +348,7 @@ export function PropertyFormModal({
     draftPromiseRef.current = null
     localStorage.removeItem(STORAGE_DRAFT_KEY)
     setPropertyId(crypto.randomUUID())
+    setSelectedOwner(null)
     setSelectedBroker(null)
     setUploadedMedia([])
     reset({
@@ -356,6 +369,7 @@ export function PropertyFormModal({
       availabilityStatus: 'AVAILABLE',
       availabilityDate: '',
       accessType: 'DIRECT',
+      ownerId: null,
       brokerId: null,
       builderName: '',
       yearOfConstruction: '',
@@ -377,6 +391,8 @@ export function PropertyFormModal({
       whatsappNumber: broker.whatsappNumber,
       areaOfOperation: broker.areaOfOperation,
     })
+    setSelectedOwner(null)
+    setValue('ownerId', null)
     setValue('brokerId', broker.id, { shouldValidate: true, shouldDirty: true })
     setIsBrokerModalOpen(false)
   }
@@ -509,6 +525,7 @@ export function PropertyFormModal({
       availabilityStatus: data.availabilityStatus,
       availabilityDate: data.availabilityDate ? new Date(data.availabilityDate).toISOString() : null,
       accessType: data.accessType,
+      ownerId: data.accessType === 'DIRECT' ? data.ownerId || null : null,
       brokerId: data.accessType === 'BROKER' && data.brokerId ? data.brokerId : null,
       builderName: data.builderName?.trim() || null,
       yearOfConstruction: data.yearOfConstruction ? parseInt(data.yearOfConstruction, 10) : null,
@@ -643,7 +660,7 @@ export function PropertyFormModal({
               errors.pincode ||
               errors.carpetAreaSqFt ||
               errors.askingPrice ||
-              errors.brokerId) && (
+              errors.brokerId || errors.ownerId) && (
               <span className="w-1.5 h-1.5 rounded-full bg-red-500 inline-block ml-1.5" />
             )}
           </button>
@@ -672,7 +689,7 @@ export function PropertyFormModal({
         </div>
 
         {/* Scrollable Form Body */}
-        <form
+        <form noValidate
           id="property-form"
           onSubmit={(event) => { void handleSubmit(onSubmit)(event) }}
           className="overflow-y-auto flex-1 p-5 space-y-6"
@@ -987,23 +1004,7 @@ export function PropertyFormModal({
                   <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text mb-1.5">
                     Availability Status
                   </label>
-                  <select
-                    value={watchedAvailabilityStatus}
-                    onChange={(e) =>
-                      setValue('availabilityStatus', e.target.value as PropertyListingStatus, {
-                        shouldValidate: true,
-                        shouldDirty: true,
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-border bg-background text-foreground text-xs focus:border-gold focus:outline-hidden"
-                  >
-                    <option value="AVAILABLE">Available for Viewing</option>
-                    <option value="UNDER_NEGOTIATION">Under Negotiation</option>
-                    <option value="TOKEN_PAID">Token Advance Received</option>
-                    <option value="RENTED_OUT">Rented Out</option>
-                    <option value="SOLD">Sold Out</option>
-                    <option value="UPCOMING">Upcoming Stock</option>
-                  </select>
+                  <PropertyStatusSelect value={watchedAvailabilityStatus} onChange={value => setValue('availabilityStatus', value, { shouldValidate: true, shouldDirty: true })} />
                 </div>
 
                 <div>
@@ -1026,7 +1027,7 @@ export function PropertyFormModal({
                       Listing Access & Source
                     </span>
                     <p className="text-[10px] text-muted-text">
-                      Choose if this is direct firm inventory or co-broked (+1 Broker).
+                      Link this listing to its owner or broker.
                     </p>
                   </div>
 
@@ -1056,6 +1057,8 @@ export function PropertyFormModal({
                           shouldValidate: true,
                           shouldDirty: true,
                         })
+                        setValue('ownerId', null, { shouldDirty: true })
+                        setSelectedOwner(null)
                         setIsBrokerModalOpen(true)
                       }}
                       className={`px-3 py-1 text-[10px] font-bold uppercase border transition-colors cursor-pointer ${
@@ -1069,6 +1072,12 @@ export function PropertyFormModal({
                   </div>
                 </div>
 
+                {watchedAccessType === 'DIRECT' && <div className="border-t border-border pt-3">
+                  <div className="flex items-center justify-between gap-3 border border-border bg-surface p-3">
+                    <div><p className="text-xs font-bold">{selectedOwner?.name || 'No owner linked yet'}</p><p className="text-[10px] text-muted-text">{selectedOwner?.phone || 'Select an owner or add a new owner.'}</p></div>
+                    <button type="button" onClick={() => setIsOwnerModalOpen(true)} className="bg-gold px-3 py-2 text-[10px] font-bold uppercase text-background">{selectedOwner ? 'Change owner' : 'Select / Add owner'}</button>
+                  </div>{errors.ownerId && <p className="mt-1 text-[10px] text-red-500">{errors.ownerId.message}</p>}
+                </div>}
                 {watchedAccessType === 'BROKER' && (
                   <div className="pt-2 border-t border-border/80">
                     {selectedBroker ? (
@@ -1456,6 +1465,11 @@ export function PropertyFormModal({
         onConfirm={confirmRemoveMedia}
       />
       {/* Broker Link Modal */}
+      {isOwnerModalOpen && <OwnerSelectModal onClose={() => setIsOwnerModalOpen(false)} onSelect={owner => {
+        setSelectedOwner(owner); setSelectedBroker(null)
+        setValue('ownerId', owner.id, { shouldValidate: true, shouldDirty: true })
+        setValue('brokerId', null, { shouldDirty: true })
+      }} />}
       <BrokerSelectModal
         isOpen={isBrokerModalOpen}
         onClose={() => setIsBrokerModalOpen(false)}

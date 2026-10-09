@@ -1,6 +1,9 @@
 import type { Context } from 'hono'
 import type { AppEnv } from '../db'
 import type { CreateBrokerInput, UpdateBrokerInput } from '../zod/broker'
+import { directoryInclude, validateContactPartner, linkedPropertiesController } from '../lib/directory'
+import { brokerQuerySchema } from '../zod/broker'
+import { AppError } from '../lib/errors'
 import { BrokerStatus } from '@prisma/client'
 
 /**
@@ -39,18 +42,9 @@ export const createBrokerController = async (c: Context<AppEnv>) => {
   const data = sanitizeBrokerData(rawBody)
 
   try {
-    // If primaryContactPartnerId was explicitly provided, use it; otherwise fallback to logged-in user if exists in DB
-    let partnerId: string | null = data.primaryContactPartnerId || null
-    if (!partnerId && authUser?.id) {
-      // Verify authUser exists in User table to avoid foreign key violation
-      const userExists = await prisma.user.findUnique({
-        where: { id: authUser.id },
-        select: { id: true },
-      })
-      if (userExists) {
-        partnerId = userExists.id
-      }
-    }
+    if (!authUser) throw new AppError('Please sign in before adding a broker.', 401, 'AUTH_REQUIRED')
+    const partnerId = data.primaryContactPartnerId === undefined ? authUser.id : data.primaryContactPartnerId
+    await validateContactPartner(c, partnerId)
 
     const broker = await prisma.broker.create({
       data: {
@@ -61,11 +55,11 @@ export const createBrokerController = async (c: Context<AppEnv>) => {
         areaOfOperation: data.areaOfOperation ?? null,
         primaryContactPartnerId: partnerId,
         minDealValue: data.minDealValue !== null && data.minDealValue !== undefined ? Number(data.minDealValue) : null,
-        maxDealValue: data.maxDealValue !== null && data.maxDealValue !== undefined ? Number(data.maxDealValue) : null,
         societyExpertise: data.societyExpertise ?? [],
         status: (data.status as BrokerStatus) || BrokerStatus.ACTIVE,
         notes: data.notes ?? null,
       },
+      include: directoryInclude,
     })
 
     return c.json(
@@ -166,15 +160,8 @@ export const getBrokerStatsController = async (c: Context<AppEnv>) => {
 export const getBrokersListController = async (c: Context<AppEnv>) => {
   const prisma = c.get('prisma')
 
-  const page = Math.max(1, parseInt(c.req.query('page') || '1', 10))
-  const limit = Math.min(100, Math.max(1, parseInt(c.req.query('limit') || '10', 10)))
+  const { page, limit, search, status, primaryContactPartnerId, areaOfOperation, sortBy, sortOrder } = brokerQuerySchema.parse(c.req.query())
   const skip = (page - 1) * limit
-  const search = c.req.query('search')?.trim()
-  const status = c.req.query('status')?.toUpperCase()
-  const primaryContactPartnerId = c.req.query('primaryContactPartnerId')?.trim()
-  const areaOfOperation = c.req.query('areaOfOperation')?.trim()
-  const sortBy = c.req.query('sortBy') || 'createdAt'
-  const sortOrder = c.req.query('sortOrder') === 'asc' ? 'asc' : 'desc'
 
   const whereClause: any = {}
 
@@ -211,7 +198,7 @@ export const getBrokersListController = async (c: Context<AppEnv>) => {
   }
 
   // Allowed sort fields to prevent invalid property sorting
-  const validSortFields = ['name', 'createdAt', 'updatedAt', 'minDealValue', 'maxDealValue', 'status']
+  const validSortFields = ['name', 'createdAt', 'updatedAt', 'minDealValue', 'status']
   const orderByField = validSortFields.includes(sortBy) ? sortBy : 'createdAt'
 
   const [totalCount, brokers] = await Promise.all([
@@ -223,15 +210,7 @@ export const getBrokersListController = async (c: Context<AppEnv>) => {
       orderBy: {
         [orderByField]: sortOrder,
       },
-      include: {
-        primaryContactPartner: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
-        },
-      },
+      include: directoryInclude,
     }),
   ])
 
@@ -261,15 +240,7 @@ export const getBrokerByIdController = async (c: Context<AppEnv>) => {
 
   const broker = await prisma.broker.findUnique({
     where: { id: brokerId },
-    include: {
-      primaryContactPartner: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-        },
-      },
-    },
+    include: directoryInclude,
   })
 
   if (!broker) {
@@ -316,24 +287,7 @@ export const updateBrokerController = async (c: Context<AppEnv>) => {
 
   const data = sanitizeBrokerData(rawBody)
 
-  // If primaryContactPartnerId is provided, verify partner existence
-  if (data.primaryContactPartnerId) {
-    const partnerExists = await prisma.user.findUnique({
-      where: { id: data.primaryContactPartnerId },
-      select: { id: true },
-    })
-
-    if (!partnerExists) {
-      return c.json(
-        {
-          success: false,
-          error: 'The selected Primary Contact Partner does not exist.',
-          code: 'PARTNER_NOT_FOUND',
-        },
-        400
-      )
-    }
-  }
+  await validateContactPartner(c, data.primaryContactPartnerId)
 
   const updatedBroker = await prisma.broker.update({
     where: { id: brokerId },
@@ -345,11 +299,11 @@ export const updateBrokerController = async (c: Context<AppEnv>) => {
       ...(data.areaOfOperation !== undefined && { areaOfOperation: data.areaOfOperation }),
       ...(data.primaryContactPartnerId !== undefined && { primaryContactPartnerId: data.primaryContactPartnerId }),
       ...(data.minDealValue !== undefined && { minDealValue: data.minDealValue }),
-      ...(data.maxDealValue !== undefined && { maxDealValue: data.maxDealValue }),
       ...(data.societyExpertise !== undefined && { societyExpertise: data.societyExpertise }),
       ...(data.status !== undefined && { status: data.status as BrokerStatus }),
       ...(data.notes !== undefined && { notes: data.notes }),
     },
+    include: directoryInclude,
   })
 
   return c.json({
@@ -391,3 +345,5 @@ export const deleteBrokerController = async (c: Context<AppEnv>) => {
     message: 'Broker deleted successfully.',
   })
 }
+
+export const getBrokerPropertiesController = linkedPropertiesController('broker')

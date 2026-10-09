@@ -1,5 +1,6 @@
 'use client'
 
+import { PropertyStatusSelect } from './PropertyStatusSelect'
 import React, { useState } from 'react'
 import {
   X,
@@ -27,6 +28,7 @@ import {
 import { useRouter } from '../../context/NavigationLoaderContext'
 import { PropertyStatusBadge } from './PropertyStatusBadge'
 import { updatePropertyStatus, toggleArchiveProperty } from '../../api/properties'
+import { getApiErrorMessage } from '../../utils/errorHandler'
 import { toast } from '../../utils/toast'
 import { formatIndianCurrency, formatDate, formatRelativeTime, formatSqFt, formatBHK } from '../../utils/formatters'
 import type { Property, PropertyListingStatus } from '../../types/property'
@@ -71,8 +73,8 @@ export function PropertyDetailModal({
       await updatePropertyStatus(property.id, newStatus)
       toast.success('Status Updated', `Property status updated to ${newStatus}`)
       onStatusChanged()
-    } catch (err: any) {
-      toast.error('Update Failed', err.message || 'Could not update status')
+    } catch (err: unknown) {
+      toast.error('Update Failed', getApiErrorMessage(err))
     } finally {
       setIsUpdatingStatus(false)
     }
@@ -88,8 +90,8 @@ export function PropertyDetailModal({
       )
       onStatusChanged()
       onClose()
-    } catch (err: any) {
-      toast.error('Archive Action Failed', err.message || 'Could not toggle archive')
+    } catch (err: unknown) {
+      toast.error('Archive Action Failed', getApiErrorMessage(err))
     } finally {
       setIsArchiving(false)
     }
@@ -98,8 +100,12 @@ export function PropertyDetailModal({
   const handleNavigateToBroker = () => {
     if (property.broker) {
       onClose()
-      router.push(`/dashboard/brokers?search=${encodeURIComponent(property.broker.name)}`)
+      router.push(`/dashboard/brokers?brokerId=${encodeURIComponent(property.broker.id)}`)
     }
+  }
+
+  const handleNavigateToOwner = () => {
+    if (property.owner) { onClose(); router.push(`/dashboard/owners?ownerId=${encodeURIComponent(property.owner.id)}`) }
   }
 
   return (
@@ -209,7 +215,7 @@ export function PropertyDetailModal({
                   <Handshake className="w-3 h-3 inline" /> {property.broker.name}
                 </span>
               ) : (
-                'Direct Owner Stock'
+                property.owner ? <button type="button" onClick={handleNavigateToOwner} className="text-gold hover:underline">{property.owner.name}</button> : 'Owner not linked'
               )}
             </p>
           </div>
@@ -367,6 +373,10 @@ export function PropertyDetailModal({
                 </div>
               </div>
 
+              {property.accessType === 'DIRECT' && property.owner && <div className="flex items-center justify-between gap-3 border border-border bg-surface-secondary/40 p-4">
+                <div><p className="text-[9px] font-bold uppercase tracking-wider text-muted-text">Listed owner</p><h4 className="mt-1 text-xs font-bold">{property.owner.name}</h4><p className="text-[10px] text-muted-text">{property.owner.phone || property.owner.email}</p></div>
+                <button type="button" onClick={handleNavigateToOwner} className="flex items-center gap-1 border border-border px-3 py-1.5 text-[10px] font-bold uppercase text-gold">View owner profile <ExternalLink className="h-3 w-3" /></button>
+              </div>}
               {/* Linked Broker Card */}
               {property.accessType === 'BROKER' && property.broker && (
                 <div className="p-4 border border-border bg-surface-secondary/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -623,20 +633,7 @@ export function PropertyDetailModal({
             <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text shrink-0">
               Quick Status:
             </span>
-            <select
-              value={property.availabilityStatus}
-              onChange={(e) => handleStatusChange(e.target.value as PropertyListingStatus)}
-              disabled={isUpdatingStatus}
-              className="px-2.5 py-1.5 bg-surface border border-border text-[10px] font-bold uppercase tracking-wider text-foreground focus:outline-none focus:border-gold transition-colors"
-            >
-              <option value="AVAILABLE">Available</option>
-              <option value="UNDER_NEGOTIATION">Under Negotiation</option>
-              <option value="TOKEN_PAID">Token Paid</option>
-              <option value="DEAL_DONE">Deal Done</option>
-              <option value="RENTED_OUT">Rented Out</option>
-              <option value="SOLD">Sold</option>
-              <option value="UPCOMING">Upcoming</option>
-            </select>
+            <PropertyStatusSelect value={property.availabilityStatus} onChange={handleStatusChange} disabled={isUpdatingStatus} upwards />
             {isUpdatingStatus && <Loader2 className="w-3.5 h-3.5 animate-spin text-gold" />}
           </div>
 

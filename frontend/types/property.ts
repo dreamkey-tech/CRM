@@ -62,6 +62,10 @@ export interface LinkedBroker {
   areaOfOperation?: string | null
 }
 
+export interface LinkedOwner extends LinkedBroker {
+  address?: string | null
+}
+
 export interface SourcePartner {
   id: string
   name?: string | null
@@ -90,6 +94,7 @@ export interface Property {
   availabilityStatus: PropertyListingStatus
   availabilityDate?: string | null
   accessType: PropertyAccessType
+  ownerId?: string | null
   brokerId?: string | null
   sourcePartnerId: string
   builderName?: string | null
@@ -102,6 +107,7 @@ export interface Property {
   updatedAt: string
 
   media?: PropertyMedia[]
+  owner?: LinkedOwner | null
   broker?: LinkedBroker | null
   sourcePartner?: SourcePartner
   auditLogs?: PropertyAuditLog[]
@@ -144,6 +150,7 @@ export interface PropertyFilterParams {
   availabilityStatus?: string
   accessType?: string
   sourcePartnerId?: string
+  ownerId?: string
   brokerId?: string
   isDraft?: 'true' | 'false' | 'all'
   isArchived?: 'true' | 'false' | 'all'

@@ -32,6 +32,7 @@ import { toast } from '../../utils/toast'
 import { handleActionApiError } from '../../utils/errorHandler'
 import {
   getProperties,
+  getPropertyById,
   getFilterPresets,
   deleteFilterPreset,
 } from '../../api/properties'
@@ -235,8 +236,12 @@ export function PropertiesView() {
   useEffect(() => {
     const urlSearch = searchParams.get('search') || ''
     if (urlSearch !== searchInput) {
+      // Sync external URL navigation with the search field.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearchInput(urlSearch)
     }
+  // URL changes, not typing, should synchronize this field.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   const [selectedType, setSelectedType] = useState<PropertyType | ''>('')
@@ -286,12 +291,16 @@ export function PropertiesView() {
   }, [])
 
   useEffect(() => {
+    // Load saved server filters on mount.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPresets()
   }, [fetchPresets])
 
   // ── Fetch Properties ───────────────────────────────────────────────────────
+  const listRequestRef = useRef(0)
   const fetchPropertiesList = useCallback(
     async (pageToFetch = 1) => {
+      const request = ++listRequestRef.current
       setLoading(true)
       try {
         const queryParams: PropertyFilterParams = {
@@ -313,13 +322,13 @@ export function PropertiesView() {
         }
 
         const data = await getProperties(queryParams)
+        if (request !== listRequestRef.current) return
         setProperties(data.properties)
         setPagination(data.pagination)
       } catch (err) {
-        handleActionApiError(err, 'Failed to load properties')
+        if (request === listRequestRef.current) handleActionApiError(err, 'Failed to load properties')
       } finally {
-        setLoading(false)
-        setIsRefreshing(false)
+        if (request === listRequestRef.current) { setLoading(false); setIsRefreshing(false) }
       }
     },
     [
@@ -338,6 +347,8 @@ export function PropertiesView() {
   )
 
   useEffect(() => {
+    // Fetching synchronizes listings and loading state with the server.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchPropertiesList(1)
   }, [fetchPropertiesList])
 
@@ -420,9 +431,19 @@ export function PropertiesView() {
       selectedArea
   )
 
-  const handleOpenDetail = (prop: Property) => {
-    setSelectedPropertyDetail(prop)
+  const linkedPropertyId = searchParams.get('propertyId')
+  useEffect(() => {
+    if (!linkedPropertyId) return
+    let active = true
+    getPropertyById(linkedPropertyId).then(property => { if (active) { setSelectedPropertyDetail(property); setIsDetailModalOpen(true) } }).catch(error => { if (active) handleActionApiError(error, 'Unable to open property') })
+    return () => { active = false }
+  }, [linkedPropertyId])
+
+  const handleOpenDetail = async (property: Property) => {
+    setSelectedPropertyDetail(property)
     setIsDetailModalOpen(true)
+    try { const fullProperty = await getPropertyById(property.id); setSelectedPropertyDetail(current => current?.id === property.id ? fullProperty : current) }
+    catch (error) { handleActionApiError(error, 'Unable to load property details') }
   }
 
   const handleOpenEdit = (prop: Property, e?: React.MouseEvent) => {
@@ -437,9 +458,9 @@ export function PropertiesView() {
     setIsDeleteModalOpen(true)
   }
 
-  const handleBrokerClick = (brokerName: string, e: React.MouseEvent) => {
+  const handleBrokerClick = (brokerId: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    router.push(`/dashboard/brokers?search=${encodeURIComponent(brokerName)}`)
+    router.push(`/dashboard/brokers?brokerId=${encodeURIComponent(brokerId)}`)
   }
 
   // Active filters count
@@ -648,7 +669,7 @@ export function PropertiesView() {
                   <div className="max-h-60 overflow-y-auto divide-y divide-border/40">
                     {presets.length === 0 ? (
                       <div className="px-3 py-4 text-center text-xs text-muted-text">
-                        No saved presets yet. Click "Save Current" to create one.
+                        No saved presets yet. Click &quot;Save Current&quot; to create one.
                       </div>
                     ) : (
                       presets.map((p) => (
@@ -864,7 +885,7 @@ export function PropertiesView() {
                       {property.accessType === 'BROKER' && property.broker ? (
                         <button
                           type="button"
-                          onClick={(e) => handleBrokerClick(property.broker!.name, e)}
+                          onClick={(e) => handleBrokerClick(property.broker!.id, e)}
                           className="flex items-center gap-1.5 p-1 bg-surface-secondary border border-border hover:border-gold/60 text-left transition-colors cursor-pointer group/broker max-w-full"
                           title={`Click to view broker ${property.broker.name} in directory`}
                         >
@@ -887,7 +908,7 @@ export function PropertiesView() {
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-secondary border border-border text-[9px] font-bold uppercase tracking-wider text-muted-text">
                           <span className="w-1.5 h-1.5 bg-emerald-500" />
-                          Direct
+                          {property.owner ? <button type="button" onClick={event => { event.stopPropagation(); router.push(`/dashboard/owners?ownerId=${property.owner!.id}`) }} className="text-gold hover:underline">{property.owner.name}</button> : 'Owner not linked'}
                         </span>
                       )}
                     </td>
@@ -1064,7 +1085,7 @@ export function PropertiesView() {
                     {property.accessType === 'BROKER' && property.broker ? (
                       <button
                         type="button"
-                        onClick={(e) => handleBrokerClick(property.broker!.name, e)}
+                        onClick={(e) => handleBrokerClick(property.broker!.id, e)}
                         className="flex items-center gap-2 text-left group/broker hover:text-gold transition-colors cursor-pointer min-w-0"
                       >
                         <div
@@ -1085,7 +1106,7 @@ export function PropertiesView() {
                     ) : (
                       <div className="text-[10px] font-mono text-muted-text flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-emerald-500 shrink-0" />
-                        Direct Listing
+                        {property.owner ? <button type="button" onClick={event => { event.stopPropagation(); router.push(`/dashboard/owners?ownerId=${property.owner!.id}`) }} className="text-gold hover:underline">{property.owner.name}</button> : 'Owner not linked'}
                       </div>
                     )}
 
@@ -1209,6 +1230,7 @@ export function PropertiesView() {
           setIsDeleteModalOpen(true)
         }}
         onStatusChanged={() => {
+          if (selectedPropertyDetail) getPropertyById(selectedPropertyDetail.id).then(fresh => setSelectedPropertyDetail(current => current?.id === fresh.id ? fresh : current)).catch(error => handleActionApiError(error, 'Unable to refresh property'))
           fetchPropertiesList(pagination.page)
         }}
       />

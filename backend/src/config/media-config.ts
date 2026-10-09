@@ -45,3 +45,7 @@ export function getMediaRuleForCategory(
 
   return documents.find((d) => d.category === category) || documents[documents.length - 1]
 }
+
+// Client documents have independent rules and private storage.
+export { CLIENT_MEDIA_CONFIG, getClientDocumentRule, getClientDocumentFileErrors } from './client-media-config'
+export type { ClientDocumentCategory, ClientDocumentRule } from './client-media-config'

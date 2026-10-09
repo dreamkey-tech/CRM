@@ -15,6 +15,7 @@ import {
 import { toast } from '../../utils/toast'
 import { useThemeStore } from '../../store/useThemeStore'
 import { getWebsiteUserStats } from '../../api/websiteUsers'
+import { getOwnerStats } from '../../api/owners'
 import { getBrokerStats } from '../../api/brokers'
 import { getPropertyStats } from '../../api/properties'
 
@@ -33,6 +34,7 @@ export function MenuModulesGrid() {
   const isDark = theme === 'dark'
   const router = useRouter()
   const [websiteUserCount, setWebsiteUserCount] = useState<number | null>(null)
+  const [ownerCount, setOwnerCount] = useState<number | null>(null)
   const [brokerCount, setBrokerCount] = useState<number | null>(null)
   const [propertyCount, setPropertyCount] = useState<number | null>(null)
 
@@ -40,6 +42,8 @@ export function MenuModulesGrid() {
     getWebsiteUserStats()
       .then((s) => setWebsiteUserCount(s.totalUsers))
       .catch(() => {})
+
+    getOwnerStats().then(stats => setOwnerCount(stats.totalOwners)).catch(() => {})
 
     getBrokerStats()
       .then((s) => setBrokerCount(s.totalBrokers))
@@ -66,10 +70,11 @@ export function MenuModulesGrid() {
     {
       id: 'clients',
       title: 'Clients',
-      description: 'Manage leads, private buyer requirements, and HNW client mandates.',
-      badge: '24 Active Leads • Inquiries',
+      description: 'Client directory, partner assignments, property shortlists and sharing.',
+      badge: 'Client Directory',
       icon: Users2,
       image: 'Luxury Office Handshake at Sunset.png',
+      href: '/dashboard/clients',
     },
     {
       id: 'brokers',
@@ -87,7 +92,8 @@ export function MenuModulesGrid() {
       id: 'owners',
       title: 'Owners',
       description: 'Direct owner directory, title records, and landlord relations.',
-      badge: '89 Registered Landlords',
+      href: '/dashboard/owners',
+      badge: ownerCount !== null ? `${ownerCount.toLocaleString()} Registered Owners` : 'Owner Directory',
       icon: KeyRound,
       image: 'Keys to Ownership at Golden Hour.png',
     },

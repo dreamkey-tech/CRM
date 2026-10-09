@@ -1,6 +1,31 @@
 /**
  * OpenAPI 3.0.0 Specification for DreamKey CRM Backend API
  */
+const directoryIdParameter = { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }
+const ownerRequestProperties = {
+  name: { type: 'string', minLength: 2, maxLength: 120 },
+  phone: { type: 'string', description: 'Required Indian mobile number.' },
+  email: { type: 'string', format: 'email', nullable: true },
+  whatsappNumber: { type: 'string', nullable: true },
+  address: { type: 'string', maxLength: 500, nullable: true },
+  primaryContactPartnerId: { type: 'string', format: 'uuid', nullable: true, description: 'Defaults to the signed-in user when omitted. Null explicitly leaves it unassigned.' },
+  notes: { type: 'string', maxLength: 2000, nullable: true },
+  status: { type: 'string', enum: ['ACTIVE', 'INACTIVE'] },
+}
+const ownerUpdateOperation = {
+  tags: ['Owners'], summary: 'Update owner fields',
+  description: 'Only supplied fields change. The authenticated creator is immutable.',
+  parameters: [directoryIdParameter],
+  requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', properties: ownerRequestProperties } } } },
+  responses: { '200': { description: 'Owner updated.' }, '400': { description: 'Field validation failed.' }, '401': { description: 'Sign-in required.' }, '404': { description: 'Owner not found.' } },
+}
+const linkedPropertiesOperation = (tag: string) => ({
+  tags: [tag], summary: 'List linked published properties',
+  description: 'Relationships update automatically when a listing is linked or reassigned. Drafts are excluded; archived listings remain accessible.',
+  parameters: [directoryIdParameter, { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } }, { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 10 } }],
+  responses: { '200': { description: 'Properties with thumbnails and pagination.' }, '401': { description: 'Sign-in required.' }, '404': { description: 'Directory record not found.' } },
+})
+
 export const openApiSpec = {
   openapi: '3.0.0',
   info: {
@@ -24,6 +49,7 @@ export const openApiSpec = {
     { name: 'Properties', description: 'Property Listings, Drafts, Media Storage (Cloudflare R2), Advanced Filtering & Audit History' },
     { name: 'Property Media & R2 Storage', description: 'Cloudflare R2 Presigned Uploads, Attach & Reorder' },
     { name: 'Property Filter Presets', description: 'Saved search and filter preset management' },
+    { name: 'Owners', description: 'Authenticated owner directory, preferences, primary partners and linked listings' },
     { name: 'Brokers', description: 'CRM Broker Directory Management (CRUD, Search, Filtering)' },
     { name: 'Leads', description: 'CRM Lead management' },
     { name: 'OAuth & Social Auth', description: 'Google OAuth / Better Auth login flow' },
@@ -959,6 +985,35 @@ export const openApiSpec = {
         },
       },
     },
+    '/v1/owners': {
+      get: {
+        tags: ['Owners'], summary: 'Search and filter the owner directory',
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', minimum: 1, default: 1 } },
+          { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 10 } },
+          { name: 'search', in: 'query', schema: { type: 'string' } },
+          { name: 'status', in: 'query', schema: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'ALL'] } },
+          { name: 'primaryContactPartnerId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          { name: 'sortBy', in: 'query', schema: { type: 'string', enum: ['name', 'createdAt', 'updatedAt', 'status'] } },
+          { name: 'sortOrder', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
+        ], responses: { '200': { description: 'Owner directory with linked property counts and pagination.' }, '400': { description: 'Invalid query.' }, '401': { description: 'Sign-in required.' } },
+      },
+      post: {
+        tags: ['Owners'], summary: 'Create owner', description: 'Creator always comes from the authenticated CRM user; createdById in request data is ignored.',
+        requestBody: { required: true, content: { 'application/json': { schema: { type: 'object', required: ['name', 'phone'], properties: ownerRequestProperties } } } },
+        responses: { '201': { description: 'Owner created with creator and primary partner details.' }, '400': { description: 'Invalid fields or inactive contact partner.' }, '401': { description: 'Sign-in required.' } },
+      },
+    },
+    '/v1/owners/stats': { get: { tags: ['Owners'], summary: 'Owner totals by status and current primary partner', responses: { '200': { description: 'Owner statistics.' }, '401': { description: 'Sign-in required.' } } } },
+    '/v1/owners/partners': { get: { tags: ['Owners'], summary: 'List active CRM primary contact partners', responses: { '200': { description: 'Partner IDs, names and emails.' }, '401': { description: 'Sign-in required.' } } } },
+    '/v1/brokers/partners': { get: { tags: ['Brokers'], summary: 'List active CRM primary contact partners', responses: { '200': { description: 'Partner IDs, names and emails.' }, '401': { description: 'Sign-in required.' } } } },
+    '/v1/owners/{id}': {
+      get: { tags: ['Owners'], summary: 'Get owner profile', parameters: [directoryIdParameter], responses: { '200': { description: 'Owner details, creator, partner and property count.' }, '401': { description: 'Sign-in required.' }, '404': { description: 'Owner not found.' } } },
+      put: ownerUpdateOperation, patch: ownerUpdateOperation,
+      delete: { tags: ['Owners'], summary: 'Delete owner and clear its listing links', description: 'Properties and their media are preserved.', parameters: [directoryIdParameter], responses: { '200': { description: 'Owner removed.' }, '401': { description: 'Sign-in required.' }, '404': { description: 'Owner not found.' } } },
+    },
+    '/v1/owners/{id}/properties': { get: linkedPropertiesOperation('Owners') },
+    '/v1/brokers/{id}/properties': { get: linkedPropertiesOperation('Brokers') },
     '/v1/brokers': {
       get: {
         tags: ['Brokers'],
@@ -971,7 +1026,7 @@ export const openApiSpec = {
           { name: 'status', in: 'query', schema: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'BLOCKED', 'ALL'] } },
           { name: 'primaryContactPartnerId', in: 'query', schema: { type: 'string', format: 'uuid' } },
           { name: 'areaOfOperation', in: 'query', schema: { type: 'string' } },
-          { name: 'sortBy', in: 'query', schema: { type: 'string', enum: ['name', 'createdAt', 'updatedAt', 'minDealValue', 'maxDealValue'], default: 'createdAt' } },
+          { name: 'sortBy', in: 'query', schema: { type: 'string', enum: ['name', 'createdAt', 'updatedAt', 'minDealValue', 'status'], default: 'createdAt' } },
           { name: 'sortOrder', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'], default: 'desc' } },
         ],
         responses: {
@@ -983,7 +1038,7 @@ export const openApiSpec = {
       post: {
         tags: ['Brokers'],
         summary: 'Create Broker',
-        description: 'Register a new broker in the directory with area expertise and budget range.',
+        description: 'Register a new broker in the directory with area expertise and minimum deal value.',
         requestBody: {
           required: true,
           content: {
@@ -999,7 +1054,6 @@ export const openApiSpec = {
                   areaOfOperation: { type: 'string', nullable: true, example: 'Bandra West & Khar, Mumbai' },
                   primaryContactPartnerId: { type: 'string', format: 'uuid', nullable: true },
                   minDealValue: { type: 'number', nullable: true, example: 5000000 },
-                  maxDealValue: { type: 'number', nullable: true, example: 50000000 },
                   societyExpertise: { type: 'array', items: { type: 'string' }, example: ['Parijat Apartments', 'Silver Beach'] },
                   status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'BLOCKED'], default: 'ACTIVE' },
                   notes: { type: 'string', nullable: true, example: 'Key broker for luxury sea-facing properties.' },
@@ -1044,7 +1098,6 @@ export const openApiSpec = {
                   areaOfOperation: { type: 'string', nullable: true },
                   primaryContactPartnerId: { type: 'string', format: 'uuid', nullable: true },
                   minDealValue: { type: 'number', nullable: true },
-                  maxDealValue: { type: 'number', nullable: true },
                   societyExpertise: { type: 'array', items: { type: 'string' } },
                   status: { type: 'string', enum: ['ACTIVE', 'INACTIVE', 'BLOCKED'] },
                   notes: { type: 'string', nullable: true },
@@ -1147,6 +1200,7 @@ export const openApiSpec = {
                   pricingType: { type: 'string', enum: ['SALE', 'RENT'], default: 'SALE' },
                   availabilityStatus: { type: 'string', enum: ['AVAILABLE', 'UNDER_NEGOTIATION', 'TOKEN_PAID', 'DEAL_DONE', 'RENTED_OUT', 'SOLD', 'UPCOMING'], default: 'AVAILABLE' },
                   accessType: { type: 'string', enum: ['DIRECT', 'BROKER'], default: 'DIRECT' },
+                  ownerId: { type: 'string', format: 'uuid', nullable: true, description: 'Required when publishing a DIRECT listing. Mutually exclusive with brokerId.' },
                   brokerId: { type: 'string', format: 'uuid', nullable: true },
                   notes: { type: 'string', nullable: true },
                   media: { type: 'array', items: { type: 'object' } },
@@ -1180,7 +1234,8 @@ export const openApiSpec = {
           { name: 'availabilityStatus', in: 'query', description: 'AVAILABLE, UNDER_NEGOTIATION, TOKEN_PAID, etc.', schema: { type: 'string' } },
           { name: 'accessType', in: 'query', description: 'DIRECT or BROKER (or +1)', schema: { type: 'string' } },
           { name: 'sourcePartnerId', in: 'query', schema: { type: 'string' } },
-          { name: 'brokerId', in: 'query', schema: { type: 'string' } },
+          { name: 'ownerId', in: 'query', schema: { type: 'string', format: 'uuid' } },
+          { name: 'brokerId', in: 'query', schema: { type: 'string', format: 'uuid' } },
           { name: 'isDraft', in: 'query', schema: { type: 'string', enum: ['true', 'false', 'all'] } },
           { name: 'isArchived', in: 'query', schema: { type: 'string', enum: ['true', 'false', 'all'] } },
           { name: 'sortBy', in: 'query', schema: { type: 'string', enum: ['createdAt', 'updatedAt', 'askingPrice', 'carpetAreaSqFt', 'societyBuildingName'] } },
@@ -1219,6 +1274,7 @@ export const openApiSpec = {
                   availabilityStatus: { type: 'string', enum: ['AVAILABLE', 'UNDER_NEGOTIATION', 'TOKEN_PAID', 'DEAL_DONE', 'RENTED_OUT', 'SOLD', 'UPCOMING'], default: 'AVAILABLE' },
                   availabilityDate: { type: 'string', format: 'date-time', nullable: true },
                   accessType: { type: 'string', enum: ['DIRECT', 'BROKER'], default: 'DIRECT' },
+                  ownerId: { type: 'string', format: 'uuid', nullable: true, description: 'Required when publishing a DIRECT listing. Mutually exclusive with brokerId.' },
                   brokerId: { type: 'string', format: 'uuid', nullable: true },
                   builderName: { type: 'string', example: 'Oberoi Realty' },
                   yearOfConstruction: { type: 'integer', example: 2023 },

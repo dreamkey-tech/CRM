@@ -1,0 +1,91 @@
+{
+  "client": {
+    "storage": "PRIVATE",
+    "documents": [
+      {
+        "key": "aadhaar",
+        "category": "AADHAAR",
+        "label": "Aadhaar",
+        "description": "Identity document scans.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ]
+      },
+      {
+        "key": "paymentReceipts",
+        "category": "PAYMENT_RECEIPT",
+        "label": "Payment Receipts",
+        "description": "Payment receipt scans and PDFs.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ]
+      },
+      {
+        "key": "clientDocuments",
+        "category": "CLIENT_DOCUMENT",
+        "label": "Client Documents",
+        "description": "Other client paperwork.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ]
+      },
+      {
+        "key": "pccApplications",
+        "category": "PCC_APPLICATION",
+        "label": "PCC Applications",
+        "description": "PCC application forms and supporting paperwork.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ]
+      },
+      {
+        "key": "certificates",
+        "category": "CERTIFICATE",
+        "label": "Certificates",
+        "description": "Client certificates and certifications.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ]
+      },
+      {
+        "key": "kyc",
+        "category": "KYC",
+        "label": "KYC Documents",
+        "description": "Know Your Customer supporting documents.",
+        "maxCount": 1,
+        "maxMb": 10,
+        "allowedMimeTypes": [
+          "application/pdf",
+          "image/jpeg",
+          "image/png",
+          "image/webp"
+        ]
+      }
+    ]
+  }
+}

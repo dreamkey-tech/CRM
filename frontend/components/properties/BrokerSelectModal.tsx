@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Search, X, Handshake, MapPin, Phone, Check, Loader2 } from 'lucide-react'
+import { getApiErrorMessage } from '../../utils/errorHandler'
 import { getBrokersList } from '../../api/brokers'
 import type { Broker } from '../../types/broker'
 
@@ -22,25 +23,31 @@ export function BrokerSelectModal({
   const [brokers, setBrokers] = useState<Broker[]>([])
   const [loading, setLoading] = useState(false)
 
+  const [error, setError] = useState<string | null>(null)
+  const [attempt, setAttempt] = useState(0)
+
   useEffect(() => {
     if (!isOpen) return
 
+    let active = true
+    // Synchronize loading when the picker opens or its query changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setLoading(true)
     const timeout = setTimeout(() => {
       getBrokersList({ search: searchTerm, limit: 30, status: 'ACTIVE' })
         .then((res) => {
-          setBrokers(res.brokers || [])
+          if (active) { setBrokers(res.brokers || []); setError(null) }
         })
         .catch((err) => {
-          console.error('Failed to load brokers:', err)
+          if (active) setError(getApiErrorMessage(err))
         })
         .finally(() => {
-          setLoading(false)
+          if (active) setLoading(false)
         })
     }, 250)
 
-    return () => clearTimeout(timeout)
-  }, [isOpen, searchTerm])
+    return () => { active = false; clearTimeout(timeout) }
+  }, [isOpen, searchTerm, attempt])
 
   if (!isOpen) return null
 
@@ -85,7 +92,7 @@ export function BrokerSelectModal({
 
         {/* Broker List */}
         <div className="overflow-y-auto flex-1 divide-y divide-border">
-          {loading ? (
+          {error && !loading ? <p role="alert" className="p-5 text-xs text-red-500">{error} <button type="button" className="underline" onClick={() => setAttempt(attempt + 1)}>Retry</button></p> : loading ? (
             <div className="py-12 flex flex-col items-center justify-center text-muted-text">
               <Loader2 className="w-5 h-5 animate-spin text-gold mb-2" />
               <span className="text-[10px] font-bold uppercase tracking-wider">

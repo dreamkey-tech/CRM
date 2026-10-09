@@ -1,7 +1,8 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import type { AppEnv } from '../db'
-import { optionalAuthMiddleware } from '../middleware/auth'
+import { authMiddleware } from '../middleware/auth'
+import { directoryIdSchema } from '../lib/directory'
 import { zodValidationHook } from '../lib/validator'
 import {
   generateUploadUrlsSchema,
@@ -36,8 +37,8 @@ import {
 
 export const propertyRoutes = new Hono<AppEnv>()
 
-// Optional auth middleware attaches authenticated CRM user if session exists
-propertyRoutes.use('*', optionalAuthMiddleware)
+// Property records and uploads require a signed-in CRM user.
+propertyRoutes.use('*', authMiddleware)
 
 /**
  * 0. GET /v1/properties/stats
@@ -105,7 +106,7 @@ propertyRoutes.post(
  * 7. GET /v1/properties/:id
  * Retrieve full property details by ID (with media, broker, partner, audit logs)
  */
-propertyRoutes.get('/:id', getPropertyByIdController)
+propertyRoutes.get('/:id', zValidator('param', directoryIdSchema, zodValidationHook), getPropertyByIdController)
 
 /**
  * 8. PUT /v1/properties/:id
@@ -113,6 +114,7 @@ propertyRoutes.get('/:id', getPropertyByIdController)
  */
 propertyRoutes.put(
   '/:id',
+  zValidator('param', directoryIdSchema, zodValidationHook),
   zValidator('json', updatePropertySchema, zodValidationHook),
   updatePropertyController
 )
@@ -161,4 +163,4 @@ propertyRoutes.patch('/:id/archive', toggleArchivePropertyController)
  * 14. DELETE /v1/properties/:id
  * Permanently delete property from DB and batch-purge all associated media from R2
  */
-propertyRoutes.delete('/:id', deletePropertyController)
+propertyRoutes.delete('/:id', zValidator('param', directoryIdSchema, zodValidationHook), deletePropertyController)

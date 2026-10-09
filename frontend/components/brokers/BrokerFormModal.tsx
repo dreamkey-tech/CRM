@@ -1,5 +1,7 @@
 'use client'
 
+import { PartnerSelectField } from '../directory/PartnerSelectField'
+import { useAuthStore } from '../../store/useAuthStore'
 import React, { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -40,6 +42,7 @@ export function BrokerFormModal({
   onSuccess,
   brokerToEdit,
 }: BrokerFormModalProps) {
+  const currentUser = useAuthStore(state => state.user)
   const isEditing = Boolean(brokerToEdit)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [societyInput, setSocietyInput] = useState('')
@@ -54,9 +57,8 @@ export function BrokerFormModal({
       email: '',
       whatsappNumber: '',
       areaOfOperation: '',
-      primaryContactPartnerId: null,
+      primaryContactPartnerId: currentUser?.id || null,
       minDealValue: '',
-      maxDealValue: '',
       societyExpertise: [],
       status: 'ACTIVE',
       notes: '',
@@ -77,7 +79,6 @@ export function BrokerFormModal({
   const watchedPhone = watch('phone')
   const watchedWhatsapp = watch('whatsappNumber')
   const watchedMinDeal = watch('minDealValue')
-  const watchedMaxDeal = watch('maxDealValue')
   const watchedSocietyList = watch('societyExpertise') || []
   const watchedStatus = watch('status')
 
@@ -96,10 +97,6 @@ export function BrokerFormModal({
             brokerToEdit.minDealValue !== null && brokerToEdit.minDealValue !== undefined
               ? String(brokerToEdit.minDealValue)
               : '',
-          maxDealValue:
-            brokerToEdit.maxDealValue !== null && brokerToEdit.maxDealValue !== undefined
-              ? String(brokerToEdit.maxDealValue)
-              : '',
           societyExpertise: brokerToEdit.societyExpertise || [],
           status: brokerToEdit.status || 'ACTIVE',
           notes: brokerToEdit.notes || '',
@@ -111,9 +108,8 @@ export function BrokerFormModal({
           email: '',
           whatsappNumber: '',
           areaOfOperation: '',
-          primaryContactPartnerId: null,
+          primaryContactPartnerId: currentUser?.id || null,
           minDealValue: '',
-          maxDealValue: '',
           societyExpertise: [],
           status: 'ACTIVE',
           notes: '',
@@ -122,7 +118,7 @@ export function BrokerFormModal({
       setErrorMessage(null)
       setSocietyInput('')
     }
-  }, [isOpen, brokerToEdit, reset])
+  }, [isOpen, brokerToEdit, reset, currentUser?.id])
 
   if (!isOpen) return null
 
@@ -169,10 +165,6 @@ export function BrokerFormModal({
         data.minDealValue !== '' && data.minDealValue !== null && data.minDealValue !== undefined
           ? Number(data.minDealValue)
           : null
-      const maxNum =
-        data.maxDealValue !== '' && data.maxDealValue !== null && data.maxDealValue !== undefined
-          ? Number(data.maxDealValue)
-          : null
 
       const payload = {
         name: data.name.trim(),
@@ -182,7 +174,6 @@ export function BrokerFormModal({
         areaOfOperation: data.areaOfOperation?.trim() || null,
         primaryContactPartnerId: data.primaryContactPartnerId || null,
         minDealValue: minNum,
-        maxDealValue: maxNum,
         societyExpertise: data.societyExpertise || [],
         status: data.status,
         notes: data.notes?.trim() || null,
@@ -241,7 +232,7 @@ export function BrokerFormModal({
               </h3>
               <p className="text-[10px] text-muted-text truncate">
                 {isEditing
-                  ? 'Update contact details, area expertise and budget range'
+                  ? 'Update contact details, area expertise and minimum deal value'
                   : 'Add a new real estate channel partner to the CRM directory'}
               </p>
             </div>
@@ -282,7 +273,7 @@ export function BrokerFormModal({
         )}
 
         {/* ── Form Body (scrollable) ── */}
-        <form
+        <form noValidate
           id="broker-form"
           onSubmit={handleSubmit(onSubmit)}
           className="overflow-y-auto flex-1 divide-y divide-border"
@@ -418,7 +409,7 @@ export function BrokerFormModal({
           {/* Section 2 — Deal Value */}
           <div className="px-5 py-5 space-y-4">
             <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-muted-text">
-              Deal Value & Budget Capacity (INR ₹)
+              Minimum Deal Value (INR ₹)
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -454,40 +445,11 @@ export function BrokerFormModal({
                 )}
               </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-text">
-                    Maximum Deal Value (₹)
-                  </label>
-                  {watchedMaxDeal &&
-                    !isNaN(Number(watchedMaxDeal)) &&
-                    Number(watchedMaxDeal) > 0 && (
-                      <span className="text-[10px] font-bold text-gold">
-                        {formatIndianCurrency(Number(watchedMaxDeal))}
-                      </span>
-                    )}
-                </div>
-                <div className="relative">
-                  <IndianRupee className="w-3.5 h-3.5 text-muted-text absolute left-3 top-1/2 -translate-y-1/2" />
-                  <input
-                    type="number"
-                    min="0"
-                    step="10000"
-                    {...register('maxDealValue')}
-                    placeholder="e.g. 50000000 (5Cr)"
-                    className={getInputCls(Boolean(errors.maxDealValue), true)}
-                  />
-                </div>
-                {errors.maxDealValue && (
-                  <p className="text-red-500 text-[10px] mt-1 flex items-center gap-1 font-medium">
-                    <AlertCircle className="w-3 h-3 shrink-0" />
-                    <span>{errors.maxDealValue.message}</span>
-                  </p>
-                )}
-              </div>
+
             </div>
           </div>
 
+          <div className="px-5 py-5"><PartnerSelectField value={watch('primaryContactPartnerId')} onChange={value => setValue('primaryContactPartnerId', value, { shouldValidate: true, shouldDirty: true })} error={errors.primaryContactPartnerId?.message} /></div>
           {/* Section 3 — Society Expertise */}
           <div className="px-5 py-5 space-y-3">
             <div className="flex items-center justify-between">

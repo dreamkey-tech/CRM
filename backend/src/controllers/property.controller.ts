@@ -23,36 +23,16 @@ import { PROPERTY_MEDIA_CONFIG } from '../config/media-config'
 import { Prisma, PrismaClient } from '@prisma/client'
 
 /**
- * Helper to resolve source partner user ID (from auth or fallback for dev)
+ * Resolve the source partner exclusively from the authenticated CRM session
  */
 async function resolveSourcePartnerId(
   prisma: PrismaClient,
   authUser?: AuthUser,
-  explicitId?: string
 ): Promise<string> {
-  if (explicitId) {
-    const user = await prisma.user.findUnique({
-      where: { id: explicitId },
-      select: { id: true },
-    })
-    if (user) return user.id
-  }
-  if (authUser?.id) {
-    const user = await prisma.user.findUnique({
-      where: { id: authUser.id },
-      select: { id: true },
-    })
-    if (user) return user.id
-  }
-  const firstUser = await prisma.user.findFirst({
-    where: { isActive: true },
-    select: { id: true },
-  })
-  if (firstUser) return firstUser.id
-
-  throw new Error(
-    'No CRM partner account found in the database. Please ensure a user exists.'
-  )
+  if (!authUser?.id) throw new Error('Please sign in before managing properties.')
+  const user = await prisma.user.findUnique({ where: { id: authUser.id }, select: { id: true } })
+  if (!user) throw new Error('Your CRM account was not found. Please sign in again.')
+  return user.id
 }
 
 /**
@@ -140,6 +120,10 @@ export async function createPropertyDraftController(c: Context<AppEnv>) {
     const partnerId = await resolveSourcePartnerId(prisma, user)
 
     // If broker is specified, verify existence
+    if (body.ownerId) {
+      const owner = await prisma.owner.findUnique({ where: { id: body.ownerId } })
+      if (!owner) return c.json({ success: false, error: 'Selected owner does not exist.', code: 'OWNER_NOT_FOUND', details: [{ field: 'ownerId', message: 'Please select an existing owner.' }] }, 400)
+    }
     if (body.brokerId) {
       const brokerExists = await prisma.broker.findUnique({
         where: { id: body.brokerId },
@@ -179,7 +163,8 @@ export async function createPropertyDraftController(c: Context<AppEnv>) {
         pricingType: body.pricingType || 'SALE',
         availabilityStatus: body.availabilityStatus || 'AVAILABLE',
         accessType: body.accessType || 'DIRECT',
-        brokerId: body.brokerId || null,
+        brokerId: body.accessType === 'BROKER' ? body.brokerId || null : null,
+        ownerId: body.accessType !== 'BROKER' ? body.ownerId || null : null,
         notes: body.notes || null,
       },
     })
@@ -216,6 +201,7 @@ export async function createPropertyDraftController(c: Context<AppEnv>) {
       where: { id: draftProperty.id },
       include: {
         media: { orderBy: { order: 'asc' } },
+        owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
         broker: {
           select: { id: true, name: true, phone: true, email: true },
         },
@@ -257,6 +243,10 @@ export async function createPropertyController(c: Context<AppEnv>) {
   try {
     const partnerId = await resolveSourcePartnerId(prisma, user)
 
+    if (body.ownerId) {
+      const owner = await prisma.owner.findUnique({ where: { id: body.ownerId } })
+      if (!owner) return c.json({ success: false, error: 'Selected owner does not exist.', code: 'OWNER_NOT_FOUND', details: [{ field: 'ownerId', message: 'Please select an existing owner.' }] }, 400)
+    }
     if (body.brokerId) {
       const broker = await prisma.broker.findUnique({
         where: { id: body.brokerId },
@@ -296,7 +286,8 @@ export async function createPropertyController(c: Context<AppEnv>) {
           ? new Date(body.availabilityDate)
           : null,
         accessType: body.accessType,
-        brokerId: body.brokerId ?? null,
+        brokerId: body.accessType === 'BROKER' ? body.brokerId ?? null : null,
+        ownerId: body.accessType !== 'BROKER' ? body.ownerId ?? null : null,
         builderName: body.builderName ?? null,
         yearOfConstruction: body.yearOfConstruction ?? null,
         totalUnits: body.totalUnits ?? null,
@@ -338,6 +329,7 @@ export async function createPropertyController(c: Context<AppEnv>) {
       where: { id: newProperty.id },
       include: {
         media: { orderBy: { order: 'asc' } },
+        owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
         broker: {
           select: { id: true, name: true, phone: true, email: true },
         },
@@ -386,6 +378,7 @@ export async function listPropertiesController(c: Context<AppEnv>) {
     locationArea,
     pincode,
     brokerId,
+    ownerId,
     sourcePartnerId,
     minPrice,
     maxPrice,
@@ -474,6 +467,7 @@ export async function listPropertiesController(c: Context<AppEnv>) {
   }
 
   // Broker filter
+  if (ownerId) whereConditions.push({ ownerId })
   if (brokerId) {
     const brokers = brokerId
       .split(',')
@@ -601,7 +595,8 @@ export async function listPropertiesController(c: Context<AppEnv>) {
           media: {
             orderBy: { order: 'asc' },
           },
-          broker: {
+          owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
+        broker: {
             select: { id: true, name: true, phone: true, email: true },
           },
           sourcePartner: {
@@ -647,6 +642,7 @@ export async function getPropertyByIdController(c: Context<AppEnv>) {
       where: { id },
       include: {
         media: { orderBy: { order: 'asc' } },
+        owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
         broker: {
           select: {
             id: true,
@@ -726,6 +722,10 @@ export async function updatePropertyController(c: Context<AppEnv>) {
       )
     }
 
+    if (body.ownerId) {
+      const owner = await prisma.owner.findUnique({ where: { id: body.ownerId } })
+      if (!owner) return c.json({ success: false, error: 'Selected owner does not exist.', code: 'OWNER_NOT_FOUND', details: [{ field: 'ownerId', message: 'Please select an existing owner.' }] }, 400)
+    }
     if (body.brokerId) {
       const broker = await prisma.broker.findUnique({
         where: { id: body.brokerId },
@@ -742,12 +742,20 @@ export async function updatePropertyController(c: Context<AppEnv>) {
       }
     }
 
-    if (body.isDraft === false) {
+    const nextAccessType = body.accessType ?? existing.accessType
+    if ((body.ownerId && nextAccessType !== 'DIRECT') || (body.brokerId && nextAccessType !== 'BROKER')) return c.json({ success: false, error: 'Select the matching owner or broker contact type before linking this contact.', code: 'INVALID_CONTACT', details: [{ field: body.ownerId ? 'ownerId' : 'brokerId', message: 'Contact type does not match this listing.' }] }, 400)
+    const contactData = {
+      ...existing, ...body,
+      brokerId: nextAccessType === 'BROKER' ? body.brokerId !== undefined ? body.brokerId : existing.brokerId : null,
+      ownerId: nextAccessType === 'DIRECT' ? body.ownerId !== undefined ? body.ownerId : existing.ownerId : null,
+    }
+    if (body.ownerId && body.brokerId) return c.json({ success: false, error: 'Link either an owner or a broker, not both.', code: 'INVALID_CONTACT' }, 400)
+    if (contactData.isDraft === false) {
       const validation = createPropertySchema.safeParse({
-        ...existing, ...body,
+        ...contactData,
         availabilityDate: body.availabilityDate !== undefined ? body.availabilityDate : existing.availabilityDate?.toISOString() ?? null,
       })
-      if (!validation.success) return c.json({ success: false, error: 'Complete the required property details before publishing.', issues: validation.error.issues, code: 'VALIDATION_ERROR' }, 400)
+      if (!validation.success) return c.json({ success: false, error: validation.error.issues[0]?.message || 'Complete the required property details.', details: validation.error.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })), code: 'VALIDATION_ERROR' }, 400)
     }
 
     const updated = await prisma.property.update({
@@ -790,8 +798,10 @@ export async function updatePropertyController(c: Context<AppEnv>) {
               : null
             : existing.availabilityDate,
         accessType: body.accessType ?? existing.accessType,
-        brokerId:
-          body.brokerId !== undefined ? body.brokerId : existing.brokerId,
+        brokerId: (body.accessType ?? existing.accessType) === 'BROKER'
+          ? body.brokerId !== undefined ? body.brokerId : existing.brokerId : null,
+        ownerId: (body.accessType ?? existing.accessType) === 'DIRECT'
+          ? body.ownerId !== undefined ? body.ownerId : existing.ownerId : null,
         builderName:
           body.builderName !== undefined
             ? body.builderName
@@ -813,6 +823,7 @@ export async function updatePropertyController(c: Context<AppEnv>) {
       },
       include: {
         media: { orderBy: { order: 'asc' } },
+        owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
         broker: {
           select: { id: true, name: true, phone: true, email: true },
         },

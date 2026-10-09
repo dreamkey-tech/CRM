@@ -22,7 +22,7 @@ export const propertyListingStatusSchema = z.enum([
 
 export const propertyAccessTypeSchema = z.enum(['DIRECT', 'BROKER'])
 
-export const propertyFormSchema = z
+const basePropertyFormSchema = z
   .object({
     propertyType: propertyTypeSchema,
     pricingType: propertyPricingTypeSchema,
@@ -105,7 +105,8 @@ export const propertyFormSchema = z
     availabilityDate: z.string().optional(),
 
     accessType: propertyAccessTypeSchema,
-    brokerId: z.string().nullable().optional(),
+    ownerId: z.string().uuid('Please select a valid owner.').nullable().optional(),
+    brokerId: z.string().uuid('Please select a valid broker.').nullable().optional(),
 
     builderName: z.string().trim().max(120).optional(),
     yearOfConstruction: z
@@ -142,5 +143,10 @@ export const propertyFormSchema = z
       path: ['brokerId'],
     }
   )
+
+export const propertyFormSchema = basePropertyFormSchema.superRefine((data, context) => {
+  if (data.accessType === 'DIRECT' && !data.ownerId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Please select an owner for this direct listing.', path: ['ownerId'] })
+  if (data.ownerId && data.brokerId) context.addIssue({ code: z.ZodIssueCode.custom, message: 'Choose either an owner or a broker.', path: ['ownerId'] })
+})
 
 export type PropertyFormValues = z.infer<typeof propertyFormSchema>

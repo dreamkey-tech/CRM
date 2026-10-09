@@ -15,12 +15,12 @@ export interface Broker {
   areaOfOperation: string | null
   primaryContactPartnerId: string | null
   minDealValue: number | null
-  maxDealValue: number | null
   societyExpertise: string[]
   status: BrokerStatus
   notes: string | null
   createdAt: string
   updatedAt: string
+  _count?: { properties: number }
   primaryContactPartner?: PrimaryContactPartner | null
 }
 
@@ -80,18 +80,18 @@ export interface BrokerQueryParams {
   status?: BrokerStatus | 'ALL'
   primaryContactPartnerId?: string
   areaOfOperation?: string
-  sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'minDealValue' | 'maxDealValue' | 'status'
+  sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'minDealValue' | 'status'
   sortOrder?: 'asc' | 'desc'
 }
 
 export interface CreateBrokerPayload {
+  primaryContactPartnerId?: string | null
   name: string
   phone?: string | null
   email?: string | null
   whatsappNumber?: string | null
   areaOfOperation?: string | null
   minDealValue?: number | null
-  maxDealValue?: number | null
   societyExpertise?: string[]
   status?: BrokerStatus
   notes?: string | null

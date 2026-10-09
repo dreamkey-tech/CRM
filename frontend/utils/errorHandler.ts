@@ -133,6 +133,10 @@ export function handleApiError(error: unknown, context?: string): Error {
     error,
     context ? `Failed to ${context}. Please try again.` : undefined
   )
+  if (axios.isAxiosError(error)) {
+    error.message = message
+    return error
+  }
   return new Error(message)
 }
 

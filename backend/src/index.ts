@@ -8,10 +8,12 @@ import { roleRoutes } from './routes/roles'
 import { adminWebsiteUserRoutes } from './routes/admin-website-users'
 import { oauthRoutes } from './routes/oauth'
 import { brokerRoutes } from './routes/broker'
+import { ownerRoutes } from './routes/owner'
+import { clientRoutes, publicClientShareRoutes } from './routes/client'
 import { propertyRoutes } from './routes/property'
 import { authMiddleware, requirePermission } from './middleware/auth'
 import { openApiSpec } from './lib/openapi'
-import { formatSystemError } from './lib/errors'
+import { AppError, formatSystemError } from './lib/errors'
 
 import { createWebsiteEnquirySchema } from './zod/website-enquiry'
 import { createWebsiteEnquiryController } from './controllers/website-enquiry.controller'
@@ -58,6 +60,9 @@ app.route('/v1/admin', roleRoutes)
 app.route('/v1/user', userRoutes)
 app.route('/v1/brokers', brokerRoutes)
 app.route('/v1/properties', propertyRoutes)
+app.route('/v1/owners', ownerRoutes)
+app.route('/v1/clients', clientRoutes)
+app.route('/v1/public/property-shares', publicClientShareRoutes)
 app.route('/api/auth', oauthRoutes)
 
 
@@ -109,14 +114,15 @@ app.notFound((c) => {
 
 // 8. Global Error Handler: Catches unexpected exceptions and formats user-friendly error responses
 app.onError((err, c) => {
-  console.error('Unhandled Application Error:', err)
+  if (!(err instanceof AppError)) console.error('Unhandled Application Error:', err)
   const { message, statusCode } = formatSystemError(err)
 
   return c.json(
     {
       success: false,
       error: message,
-      code: 'INTERNAL_SERVER_ERROR',
+      code: err instanceof AppError ? err.code || 'REQUEST_ERROR' : 'INTERNAL_SERVER_ERROR',
+      ...(err instanceof AppError && err.details ? { details: err.details } : {}),
     },
     statusCode
   )

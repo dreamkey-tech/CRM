@@ -26,7 +26,9 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { useThemeStore } from '../../store/useThemeStore'
-import { getBrokersList, getBrokerStats } from '../../api/brokers'
+import { toast } from '../../utils/toast'
+import { getApiErrorMessage } from '../../utils/errorHandler'
+import { getBrokersList, getBrokerStats, getBrokerById } from '../../api/brokers'
 import { BrokerStatusBadge } from './BrokerStatusBadge'
 import { BrokersStatsRow } from './BrokersStatsRow'
 import { BrokerFormModal } from './BrokerFormModal'
@@ -183,8 +185,7 @@ function HubsDropdown({ topAreas, selectedArea, onSelectArea, totalBrokers }: Hu
 const SORT_OPTIONS = [
   { value: 'createdAt', label: 'Date Created' },
   { value: 'name', label: 'Broker Name' },
-  { value: 'minDealValue', label: 'Min Budget' },
-  { value: 'maxDealValue', label: 'Max Budget' },
+  { value: 'minDealValue', label: 'Minimum Deal Value' },
 ] as const
 
 type SortByValue = typeof SORT_OPTIONS[number]['value']
@@ -270,6 +271,8 @@ export function BrokersView() {
   })
 
   // Loading
+  const requestRef = useRef(0)
+  const [listError, setListError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isStatsLoading, setIsStatsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -294,6 +297,8 @@ export function BrokersView() {
     const urlStatus = (searchParams.get('status') as BrokerStatus) || 'ALL'
     const urlArea = searchParams.get('area') || ''
     if (urlSearch !== search) {
+      // URL navigation intentionally resets the directory filters.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSearch(urlSearch)
       setDebouncedSearch(urlSearch)
     }
@@ -303,12 +308,15 @@ export function BrokersView() {
     if (urlArea !== areaFilter) {
       setAreaFilter(urlArea)
     }
+  // Only a URL change should overwrite user edits to these filters.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams])
 
   // Debounce search input (wait 350ms after user pauses typing before querying API)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search)
+      setPage(1)
     }, 350)
     return () => clearTimeout(timer)
   }, [search])
@@ -329,7 +337,7 @@ export function BrokersView() {
       const res = await getBrokerStats()
       setStats(res)
     } catch (err) {
-      console.error('Error fetching broker stats:', err)
+      toast.error('Unable to load broker statistics', getApiErrorMessage(err))
     } finally {
       setIsStatsLoading(false)
     }
@@ -337,6 +345,7 @@ export function BrokersView() {
 
   const fetchBrokers = useCallback(
     async (pageToFetch = page) => {
+      const request = ++requestRef.current
       setIsLoading(true)
       try {
         const queryParams: BrokerQueryParams = {
@@ -349,29 +358,27 @@ export function BrokersView() {
           sortOrder,
         }
         const res = await getBrokersList(queryParams)
+        if (request !== requestRef.current) return
+        setListError(null)
         setBrokers(res.brokers)
         setPagination(res.pagination)
       } catch (err) {
-        console.error('Error fetching brokers list:', err)
+        if (request === requestRef.current) setListError(getApiErrorMessage(err))
       } finally {
-        setIsLoading(false)
-        setIsRefreshing(false)
+        if (request === requestRef.current) { setIsLoading(false); setIsRefreshing(false) }
       }
     },
     [page, pagination.limit, debouncedSearch, statusFilter, areaFilter, sortBy, sortOrder]
   )
 
+  // Fetching synchronizes the directory with the server.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { fetchStats() }, [fetchStats])
-
-  // Reset to page 1 whenever any filter or sort changes
-  useEffect(() => {
-    if (page !== 1) {
-      setPage(1)
-    }
-  }, [debouncedSearch, statusFilter, areaFilter, sortBy, sortOrder])
 
   // Trigger broker fetching on page or filter changes
   useEffect(() => {
+    // Server fetching updates the loading state and data.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchBrokers(page)
   }, [page, debouncedSearch, statusFilter, areaFilter, sortBy, sortOrder, fetchBrokers])
 
@@ -390,10 +397,18 @@ export function BrokersView() {
 
   const handleOpenAddModal = () => { setBrokerToEdit(null); setIsFormModalOpen(true) }
   const handleOpenEditModal = (broker: Broker) => { setBrokerToEdit(broker); setIsFormModalOpen(true) }
+  const linkedBrokerId = searchParams.get('brokerId')
+  useEffect(() => {
+    if (!linkedBrokerId) return
+    let active = true
+    getBrokerById(linkedBrokerId).then(result => { if (active) { setSelectedBroker(result); setIsDetailModalOpen(true) } }).catch(error => { if (active) toast.error('Unable to open broker', getApiErrorMessage(error)) })
+    return () => { active = false }
+  }, [linkedBrokerId])
+
   const handleOpenDetailModal = (broker: Broker) => { setSelectedBroker(broker); setIsDetailModalOpen(true) }
   const handleOpenDeleteModal = (broker: Broker) => { setBrokerToDelete(broker); setIsDeleteModalOpen(true) }
 
-  const handleFormSuccess = () => { fetchBrokers(); fetchStats() }
+  const handleFormSuccess = (broker: Broker) => { setSelectedBroker(current => current?.id === broker.id ? broker : current); fetchBrokers(); fetchStats() }
   const handleDeleteSuccess = () => {
     if (isDetailModalOpen) setIsDetailModalOpen(false)
     fetchBrokers()
@@ -431,7 +446,7 @@ export function BrokersView() {
                 Broker & Partner Network
               </h2>
               <p className="text-[10px] text-muted-text mt-0.5">
-                Channel partners, territory expertise, deal ranges, and relationship tracking.
+                Channel partners, territory expertise, minimum deal values, and relationship tracking.
               </p>
             </div>
           </div>
@@ -536,7 +551,7 @@ export function BrokersView() {
               <div className="w-px h-4 bg-border mx-1" />
               {debouncedSearch && (
                 <span className="inline-flex items-center gap-1 px-2 py-1 bg-gold/10 text-[10px] font-bold uppercase tracking-wider text-gold shrink-0">
-                  "{debouncedSearch}"
+                  &quot;{debouncedSearch}&quot;
                   <button onClick={handleClearSearch} className="hover:text-foreground cursor-pointer">
                     <X className="w-2.5 h-2.5" />
                   </button>
@@ -558,7 +573,7 @@ export function BrokersView() {
       {/* ── 4. Table / States ── */}
       {isLoading ? (
         <TableSkeleton rows={pagination.limit || 8} columns={7} />
-      ) : brokers.length === 0 ? (
+      ) : listError ? <div role="alert" className="border border-border bg-surface p-8 text-center text-xs text-red-500">{listError}<button type="button" onClick={handleRefresh} className="ml-2 underline">Retry</button></div> : brokers.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[320px] bg-surface border border-border text-center px-4 py-12">
           <div className="w-12 h-12 border border-border flex items-center justify-center mb-4">
             <Handshake className="w-5 h-5 text-muted-text" />
@@ -586,7 +601,7 @@ export function BrokersView() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-border bg-surface-secondary">
-                  {['Broker / Partner', 'Contact', 'Area & Expertise', 'Budget Range', 'Primary Partner', 'Status', ''].map((h) => (
+                  {['Broker / Partner', 'Contact', 'Area & Expertise', 'Minimum Deal Value', 'Primary Partner', 'Status', ''].map((h) => (
                     <th
                       key={h}
                       className="py-3 px-4 text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text whitespace-nowrap"
@@ -706,10 +721,10 @@ export function BrokersView() {
                         </div>
                       </td>
 
-                      {/* Budget Range */}
+                      {/* Minimum Deal Value */}
                       <td className="py-3.5 px-4">
                         <span className="text-xs font-bold text-foreground">
-                          {formatDealRange(broker.minDealValue, broker.maxDealValue)}
+                          {formatDealRange(broker.minDealValue, null)}
                         </span>
                       </td>
 

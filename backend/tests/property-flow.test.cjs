@@ -60,7 +60,7 @@ test('draft keeps its requested ID and repeated requests reuse it', async () => 
 test('publishing updates the same draft instead of creating another property', async () => {
   let updatedId
   const existing = { id: propertyId, isDraft: true, societyBuildingName: 'Test Society', locationArea: 'Mumbai',
-    pincode: '400001', carpetAreaSqFt: 500, askingPrice: 1000000, accessType: 'DIRECT', availabilityDate: null }
+    pincode: '400001', carpetAreaSqFt: 500, askingPrice: 1000000, accessType: 'DIRECT', ownerId: partner.id, availabilityDate: null }
   const c = context({ property: { findUnique: async () => existing,
     update: async ({ where, data }) => { updatedId = where.id; return { ...existing, ...data } } } }, { isDraft: false })
   const result = await loadController().updatePropertyController(c)

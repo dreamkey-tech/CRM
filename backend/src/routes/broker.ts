@@ -1,14 +1,16 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import type { AppEnv } from '../db'
-import { optionalAuthMiddleware } from '../middleware/auth'
+import { authMiddleware } from '../middleware/auth'
 import { zodValidationHook } from '../lib/validator'
 import {
   createBrokerSchema,
   updateBrokerSchema,
+  brokerQuerySchema,
 } from '../zod/broker'
 import {
   createBrokerController,
+  getBrokerPropertiesController,
   getBrokerStatsController,
   getBrokersListController,
   getBrokerByIdController,
@@ -16,10 +18,12 @@ import {
   deleteBrokerController,
 } from '../controllers/broker.controller'
 
+import { directoryIdSchema, linkedPropertiesQuerySchema, getDirectoryPartnersController } from '../lib/directory'
+
 export const brokerRoutes = new Hono<AppEnv>()
 
-// Optional auth to attach user info (e.g. for primary contact partner default)
-brokerRoutes.use('*', optionalAuthMiddleware)
+// The authenticated user is the default primary contact partner.
+brokerRoutes.use('*', authMiddleware)
 
 /**
  * 1. GET /v1/brokers/stats - Aggregate broker stats (total, active, new this week/month, top areas)
@@ -29,12 +33,14 @@ brokerRoutes.get('/stats', getBrokerStatsController)
 /**
  * 2. GET /v1/brokers - List brokers with pagination, search, and filtering
  */
-brokerRoutes.get('/', getBrokersListController)
+brokerRoutes.get('/', zValidator('query', brokerQuerySchema, zodValidationHook), getBrokersListController)
 
 /**
  * 3. GET /v1/brokers/:id - Get a single broker by ID
  */
-brokerRoutes.get('/:id', getBrokerByIdController)
+brokerRoutes.get('/partners', getDirectoryPartnersController)
+brokerRoutes.get('/:id/properties', zValidator('param', directoryIdSchema, zodValidationHook), zValidator('query', linkedPropertiesQuerySchema, zodValidationHook), getBrokerPropertiesController)
+brokerRoutes.get('/:id', zValidator('param', directoryIdSchema, zodValidationHook), getBrokerByIdController)
 
 /**
  * 3. POST /v1/brokers - Create a new broker
@@ -50,6 +56,7 @@ brokerRoutes.post(
  */
 brokerRoutes.put(
   '/:id',
+  zValidator('param', directoryIdSchema, zodValidationHook),
   zValidator('json', updateBrokerSchema, zodValidationHook),
   updateBrokerController
 )
@@ -59,6 +66,7 @@ brokerRoutes.put(
  */
 brokerRoutes.patch(
   '/:id',
+  zValidator('param', directoryIdSchema, zodValidationHook),
   zValidator('json', updateBrokerSchema, zodValidationHook),
   updateBrokerController
 )
@@ -66,4 +74,4 @@ brokerRoutes.patch(
 /**
  * 6. DELETE /v1/brokers/:id - Delete a broker
  */
-brokerRoutes.delete('/:id', deleteBrokerController)
+brokerRoutes.delete('/:id', zValidator('param', directoryIdSchema, zodValidationHook), deleteBrokerController)

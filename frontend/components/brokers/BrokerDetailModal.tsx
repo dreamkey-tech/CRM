@@ -1,5 +1,6 @@
 'use client'
 
+import { LinkedPropertiesList } from '../directory/LinkedPropertiesList'
 import React from 'react'
 import {
   X,
@@ -180,10 +181,10 @@ export function BrokerDetailModal({
             </div>
             <div className="px-4 py-3">
               <p className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text mb-1 flex items-center gap-1">
-                <IndianRupee className="w-3 h-3 text-gold" /> Deal Capacity
+                <IndianRupee className="w-3 h-3 text-gold" /> Minimum Deal Value
               </p>
               <p className="text-xs font-bold text-foreground">
-                {formatDealRange(broker.minDealValue, broker.maxDealValue)}
+                {formatDealRange(broker.minDealValue, null)}
               </p>
             </div>
           </div>
@@ -233,6 +234,7 @@ export function BrokerDetailModal({
             )}
           </div>
 
+          <LinkedPropertiesList key={broker.id} kind="broker" id={broker.id} />
           {/* Notes */}
           {broker.notes && (
             <div className="px-4 py-3">
