@@ -45,6 +45,7 @@ export type Variables = {
 export type AppEnv = {
   Bindings: Bindings
   Variables: Variables
+  
 }
 
 export function getPrisma(databaseUrl: string): PrismaClient {
