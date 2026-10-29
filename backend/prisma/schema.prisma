@@ -29,6 +29,7 @@ model User {
   clientShortlistsAdded  ClientShortlistedProperty[] @relation("ClientShortlistCreator")
   clientSharesCreated   ClientPropertyShare[]       @relation("ClientShareCreator")
   clientDocumentsAdded  ClientDocument[]            @relation("ClientDocumentUploader")
+  auditLogs             AuditLog[]                  @relation("UserAuditLogs")
 
   @@map("users")
 }
@@ -551,5 +552,27 @@ model PropertyFilterPreset {
 
   @@index([userId])
   @@map("property_filter_presets")
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  userId       String?
+  action       String   // e.g. "LOGIN", "LOGOUT", "CREATE_EMPLOYEE", "UPDATE_EMPLOYEE", "RESET_PASSWORD", "VIEW_DOCUMENT", "CREATE", "UPDATE", "DELETE", "ACCESS_DENIED"
+  module       String   // e.g. "EMPLOYEES", "PROPERTIES", "CLIENTS", "BROKERS", "OWNERS", "FINANCE", "DOCUMENTS", "AUTH"
+  resourceId   String?
+  resourceName String?
+  details      String?
+  ipAddress    String?
+  userAgent    String?
+  status       String   @default("SUCCESS") // "SUCCESS" | "DENIED"
+  createdAt    DateTime @default(now())
+
+  user         User?    @relation("UserAuditLogs", fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([module])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
 }
 

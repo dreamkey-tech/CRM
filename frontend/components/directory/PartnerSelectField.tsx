@@ -2,14 +2,17 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import { ChevronDown, Loader2 } from 'lucide-react'
 import { getDirectoryPartners } from '../../api/directory'
-import { getApiErrorMessage } from '../../utils/errorHandler'
+import { useAuthStore } from '../../store/useAuthStore'
+import { getApiErrorMessage, isPermissionOrAccessError } from '../../utils/errorHandler'
 import type { PrimaryContactPartner } from '../../types/broker'
 
 interface Props { value: string | null | undefined; onChange: (value: string | null) => void; error?: string }
 export function PartnerSelectField({ value, onChange, error }: Props) {
+  const { hasPermission } = useAuthStore()
+  const canReadBrokers = hasPermission('brokers:read')
   const [partners, setPartners] = useState<PrimaryContactPartner[]>([])
   const [open, setOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(canReadBrokers)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [attempt, setAttempt] = useState(0)
   const id = useId()
@@ -22,12 +25,24 @@ export function PartnerSelectField({ value, onChange, error }: Props) {
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape) }
   }, [open])
   useEffect(() => {
+    if (!canReadBrokers) {
+      setLoading(false)
+      return
+    }
     let active = true
     getDirectoryPartners().then((result) => { if (active) { setPartners(result); setLoadError(null) } })
-      .catch((error) => { if (active) setLoadError(getApiErrorMessage(error)) })
+      .catch((error) => {
+        if (!active) return
+        if (isPermissionOrAccessError(error)) {
+          setPartners([])
+          setLoadError(null)
+        } else {
+          setLoadError(getApiErrorMessage(error))
+        }
+      })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [attempt])
+  }, [attempt, canReadBrokers])
   const selected = partners.find((partner) => partner.id === value)
   return <div ref={root} className="relative">
     <label id={id} className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-muted-text">Primary Contact Partner</label>
@@ -43,6 +58,17 @@ export function PartnerSelectField({ value, onChange, error }: Props) {
       </button>)}
     </div>}
     {error && <p role="alert" className="mt-1 text-[10px] text-red-500">{error}</p>}
-    {loadError && <p role="alert" className="mt-1 text-[10px] text-red-500">{loadError} <button type="button" className="underline" onClick={() => { setLoading(true); setAttempt(attempt + 1) }}>Retry</button></p>}
+    {loadError && !isPermissionOrAccessError(loadError) && (
+      <div className="mt-1.5 flex items-center gap-2 text-[10px] text-red-500" role="alert">
+        <span>{loadError}</span>
+        <button
+          type="button"
+          className="underline font-bold cursor-pointer hover:text-red-400"
+          onClick={() => { setLoading(true); setAttempt(attempt + 1) }}
+        >
+          Retry
+        </button>
+      </div>
+    )}
   </div>
 }

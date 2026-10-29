@@ -24,8 +24,10 @@ import {
   Trash2,
   Loader2,
   CheckCircle2,
+  Plus,
 } from 'lucide-react'
 import { useRouter } from '../../context/NavigationLoaderContext'
+import { useAuthStore } from '../../store/useAuthStore'
 import { PropertyStatusBadge } from './PropertyStatusBadge'
 import { updatePropertyStatus, toggleArchiveProperty } from '../../api/properties'
 import { getApiErrorMessage } from '../../utils/errorHandler'
@@ -40,6 +42,7 @@ interface PropertyDetailModalProps {
   onEdit: (property: Property) => void
   onDelete: (property: Property) => void
   onStatusChanged: () => void
+  onAddUnitInSociety?: (property: Property) => void
 }
 
 export function PropertyDetailModal({
@@ -49,8 +52,10 @@ export function PropertyDetailModal({
   onEdit,
   onDelete,
   onStatusChanged,
+  onAddUnitInSociety,
 }: PropertyDetailModalProps) {
   const router = useRouter()
+  const { hasPermission } = useAuthStore()
   const [activeTab, setActiveTab] = useState<'OVERVIEW' | 'MEDIA' | 'SOCIETY' | 'AUDIT'>('OVERVIEW')
   const [activePhotoIndex, setActivePhotoIndex] = useState(0)
   const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
@@ -98,6 +103,10 @@ export function PropertyDetailModal({
   }
 
   const handleNavigateToBroker = () => {
+    if (!hasPermission('brokers:read')) {
+      toast.error('Permission Denied', 'You do not have permission to view the broker directory.')
+      return
+    }
     if (property.broker) {
       onClose()
       router.push(`/dashboard/brokers?brokerId=${encodeURIComponent(property.broker.id)}`)
@@ -105,6 +114,10 @@ export function PropertyDetailModal({
   }
 
   const handleNavigateToOwner = () => {
+    if (!hasPermission('owners:read')) {
+      toast.error('Permission Denied', 'You do not have permission to view property owners.')
+      return
+    }
     if (property.owner) { onClose(); router.push(`/dashboard/owners?ownerId=${encodeURIComponent(property.owner.id)}`) }
   }
 
@@ -139,6 +152,20 @@ export function PropertyDetailModal({
           </div>
 
           <div className="flex items-center gap-2">
+            {hasPermission('properties:create') && onAddUnitInSociety && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onAddUnitInSociety(property)
+                }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-gold/10 border border-gold/40 text-gold hover:bg-gold hover:text-black transition-colors flex items-center gap-1 cursor-pointer"
+                title={`Add another unit in ${property.societyBuildingName}`}
+              >
+                <Plus className="w-3 h-3" /> Add Flat in Society
+              </button>
+            )}
+
             <button
               onClick={() => {
                 onClose()

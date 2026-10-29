@@ -10,6 +10,7 @@ import { getR2PublicUrl } from '../lib/r2'
 import { publicPropertySnapshotSchema } from '../zod/client'
 import dreamkey from '../../../frontend/config/dreamkey-public.json'
 import { getClientDocumentRule } from '../config/media-config'
+import { logAudit } from '../lib/audit'
 
 const clientInclude = {
   createdBy: { select: partnerSelect },
@@ -271,6 +272,34 @@ export async function attachClientDocumentController(c: Context<AppEnv>) {
 export async function downloadClientDocumentController(c: Context<AppEnv>) {
   const document = await c.get('prisma').clientDocument.findFirst({ where: { id: c.req.param('documentId')!, clientId: id(c) } })
   if (!document) throw new AppError('Document not found.', 404)
+
+  const isConfidential = ['AADHAAR', 'KYC', 'PAYMENT_RECEIPT', 'PCC_APPLICATION'].includes(document.category)
+  const rawPerms = c.get('permissions')
+  const permissions = Array.isArray(rawPerms) ? rawPerms : []
+  const hasSensitiveAccess = permissions.includes('*:*') || permissions.includes('clients:documents:view_sensitive')
+
+  if (isConfidential && !hasSensitiveAccess) {
+    const user = actor(c)
+    await logAudit(c, {
+      action: 'ACCESS_DENIED',
+      module: 'DOCUMENTS',
+      resourceId: document.id,
+      resourceName: document.originalName,
+      details: `${user.name || user.email || 'Employee'} attempted to download confidential ${document.category}`,
+      status: 'DENIED',
+    })
+    throw new AppError('You do not have permission to access confidential documents.', 403, 'PERMISSION_DENIED')
+  }
+
+  await logAudit(c, {
+    action: 'VIEW_DOCUMENT',
+    module: 'DOCUMENTS',
+    resourceId: document.id,
+    resourceName: document.originalName,
+    details: `Downloaded ${document.category} document (${document.originalName})`,
+    status: 'SUCCESS',
+  })
+
   c.header('Cache-Control', 'no-store')
   return c.json({ success: true, url: await signClientDocumentDownload(c.env, document, c.req.query('inline') === 'true') })
 }

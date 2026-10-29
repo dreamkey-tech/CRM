@@ -202,3 +202,17 @@ export interface PropertyDraftStorage {
   uploadedMedia: PropertyMedia[]
   savedAt: string
 }
+
+export interface SocietyProfile {
+  societyBuildingName: string
+  locationArea: string
+  pincode: string
+  city: string
+  builderName?: string | null
+  yearOfConstruction?: number | null
+  totalFloors?: number | null
+  totalUnits?: number | null
+  reraNumber?: string | null
+  amenities?: string[]
+  propertyCount: number
+}

@@ -7,7 +7,7 @@ export default function BrokersLoading() {
       breadcrumbCount={2}
       statsCount={4}
       tableRows={8}
-      maxWidthClass="max-w-7xl"
+      maxWidthClass="max-w-9xl"
     />
   )
 }

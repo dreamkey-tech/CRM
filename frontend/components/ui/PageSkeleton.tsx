@@ -281,7 +281,7 @@ export function DashboardOverviewSkeleton() {
 export function NavbarSkeleton() {
   return (
     <header className="w-full bg-surface border-b border-border/80 fixed top-0 z-40 shadow-xs h-16">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* Brand */}
         <div className="flex items-center gap-3">
           <Skeleton className="w-10 h-10" />
@@ -328,7 +328,7 @@ export function PageSkeleton({
   breadcrumbCount = 2,
   statsCount = 4,
   tableRows = 6,
-  maxWidthClass = 'max-w-7xl',
+  maxWidthClass = 'max-w-9xl',
 }: PageSkeletonProps) {
   return (
     <div className="min-h-screen bg-background text-foreground">

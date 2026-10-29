@@ -9,6 +9,7 @@ import type {
   PresignedUploadItem,
   PropertyMedia,
   PropertyStats,
+  SocietyProfile,
 } from '../types/property'
 
 export interface GetPropertiesResponse {
@@ -328,4 +329,21 @@ export async function discardPropertyUpload(propertyId: string, key: string): Pr
   try {
     await propertyApiClient.post(`/${propertyId}/media/discard-upload`, { key })
   } catch (error) { throw handleApiError(error, 'discard upload') }
+}
+
+/**
+ * 17. List Distinct Society Profiles for quick pre-fill and auto-complete
+ */
+export async function getSocietyProfiles(q?: string): Promise<SocietyProfile[]> {
+  try {
+    const res = await propertyApiClient.get<{
+      success: boolean
+      societies: SocietyProfile[]
+    }>('/societies/profiles', {
+      params: q ? { q } : undefined,
+    })
+    return res.data.societies || []
+  } catch (error) {
+    throw handleApiError(error, 'fetch society profiles')
+  }
 }

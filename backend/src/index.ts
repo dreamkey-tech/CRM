@@ -11,6 +11,8 @@ import { brokerRoutes } from './routes/broker'
 import { ownerRoutes } from './routes/owner'
 import { clientRoutes, publicClientShareRoutes } from './routes/client'
 import { propertyRoutes } from './routes/property'
+import { employeeRoutes } from './routes/employee'
+import { auditRoutes } from './routes/audit'
 import { authMiddleware, requirePermission } from './middleware/auth'
 import { openApiSpec } from './lib/openapi'
 import { AppError, formatSystemError } from './lib/errors'
@@ -56,6 +58,8 @@ app.get('/docs', swaggerUI({ url: '/openapi.json' }))
 // 5. Mount API routes (/v1/auth/..., /v1/admin/..., /v1/user/..., /v1/brokers, /v1/properties, /api/auth/...)
 app.route('/v1/auth', authRoutes)
 app.route('/v1/admin/website-users', adminWebsiteUserRoutes)
+app.route('/v1/admin/employees', employeeRoutes)
+app.route('/v1/admin/audit-logs', auditRoutes)
 app.route('/v1/admin', roleRoutes)
 app.route('/v1/user', userRoutes)
 app.route('/v1/brokers', brokerRoutes)
@@ -64,6 +68,18 @@ app.route('/v1/owners', ownerRoutes)
 app.route('/v1/clients', clientRoutes)
 app.route('/v1/public/property-shares', publicClientShareRoutes)
 app.route('/api/auth', oauthRoutes)
+
+// Finance module endpoint (guarded by finance:read)
+app.get('/v1/finance', authMiddleware, requirePermission('finance:read'), (c) => {
+  return c.json({
+    success: true,
+    data: {
+      totalRevenue: 2450000,
+      pendingCommissions: 180000,
+      clearedCommissions: 2270000,
+    },
+  })
+})
 
 
 app.get('/', (c) => {

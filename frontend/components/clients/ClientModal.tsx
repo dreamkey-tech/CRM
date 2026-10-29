@@ -1,6 +1,7 @@
 'use client'
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { X, Maximize2, Minimize2, Loader2 } from 'lucide-react'
+import { isPermissionOrAccessError } from '../../utils/errorHandler'
 
 export const buttonClass = 'inline-flex min-h-10 items-center justify-center gap-2 border border-border px-4 py-2 text-[10px] font-bold uppercase tracking-wider transition-colors hover:border-gold disabled:cursor-not-allowed disabled:opacity-40'
 export const inputClass = 'w-full border border-border bg-background px-3 py-2.5 text-xs outline-none focus:border-gold'
@@ -38,7 +39,22 @@ export function ClientModal({ title, onClose, children, footer, busy = false, co
   </div>
 }
 export function ClientError({ message, retry }: { message?: string | null; retry?: () => void }) {
-  return message ? <div role="alert" className="mb-4 border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-500">{message}{retry && <button onClick={retry} className="ml-3 underline">Retry</button>}</div> : null
+  if (!message) return null
+  const isPerm = isPermissionOrAccessError(message)
+  return (
+    <div role="alert" className="mb-4 border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-500 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <span className="leading-relaxed">{message}</span>
+      {retry && !isPerm && (
+        <button
+          type="button"
+          onClick={retry}
+          className="underline font-bold text-foreground hover:text-gold shrink-0 cursor-pointer self-start sm:self-auto"
+        >
+          Retry
+        </button>
+      )}
+    </div>
+  )
 }
 export function ClientLoading({ text = 'Loading...' }: { text?: string }) { return <div role="status" className="flex min-h-40 items-center justify-center gap-2 text-xs text-muted-text"><Loader2 className="h-5 w-5 animate-spin text-gold" />{text}</div> }
 export function ClientConfirm({ title, description, onClose, action }: { title: string; description: string; onClose: () => void; action: () => Promise<void> }) {

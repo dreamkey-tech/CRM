@@ -33,7 +33,9 @@ import { PROPERTY_MEDIA_CONFIG, getMediaRuleForCategory } from '../../config/med
 import { DeleteMediaConfirmModal } from './DeleteMediaConfirmModal'
 import { OwnerSelectModal } from './OwnerSelectModal'
 import { BrokerSelectModal } from './BrokerSelectModal'
+import { SocietySelectModal } from './SocietySelectModal'
 import { toast } from '../../utils/toast'
+import { useAuthStore } from '../../store/useAuthStore'
 import { handleFormApiError } from '../../utils/errorHandler'
 import { formatIndianCurrency } from '../../utils/formatters'
 import type {
@@ -45,6 +47,7 @@ import type {
   PropertyMediaCategory,
   PropertyMedia,
   LinkedBroker,
+  SocietyProfile,
 } from '../../types/property'
 import type { Broker } from '../../types/broker'
 
@@ -53,6 +56,7 @@ interface PropertyFormModalProps {
   onClose: () => void
   onSuccess: () => void
   initialProperty?: Property | null
+  initialSociety?: SocietyProfile | null
 }
 
 const STORAGE_DRAFT_KEY = 'dreamkey_crm_property_form_draft'
@@ -77,7 +81,19 @@ export function PropertyFormModal({
   onClose,
   onSuccess,
   initialProperty,
+  initialSociety,
 }: PropertyFormModalProps) {
+  const { hasPermission } = useAuthStore()
+  const isEditing = Boolean(initialProperty)
+  const requiredPermission = isEditing ? 'properties:update' : 'properties:create'
+
+  useEffect(() => {
+    if (isOpen && !hasPermission(requiredPermission)) {
+      toast.error('Permission Denied', `You do not have permission to ${isEditing ? 'edit' : 'add'} properties.`)
+      onClose()
+    }
+  }, [isOpen, hasPermission, requiredPermission, isEditing, onClose])
+
   const { startUploadBatch, tasks, forgetMedia, setIsDockOpen, beginMediaActivity } = useMediaUpload()
   const [isPreparingUpload, setIsPreparingUpload] = useState(false)
   const [isChangingMedia, setIsChangingMedia] = useState(false)
@@ -90,6 +106,9 @@ export function PropertyFormModal({
   const [activeTab, setActiveTab] = useState<'DETAILS' | 'MEDIA' | 'SOCIETY'>('DETAILS')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [isBrokerModalOpen, setIsBrokerModalOpen] = useState(false)
+  const [isSocietyModalOpen, setIsSocietyModalOpen] = useState(false)
+  const [prefilledSociety, setPrefilledSociety] = useState<SocietyProfile | null>(null)
+  const [isSavingAndAddingAnother, setIsSavingAndAddingAnother] = useState(false)
   const [isMaximized, setIsMaximized] = useState(false)
 
   // Property ID for draft session
@@ -223,6 +242,43 @@ export function PropertyFormModal({
         reraNumber: initialProperty.reraNumber || '',
         notes: initialProperty.notes || '',
       })
+      setPrefilledSociety(null)
+    } else if (initialSociety) {
+      // Pre-filled with an existing society
+      setPropertyId(crypto.randomUUID())
+      setSelectedOwner(null)
+      setSelectedBroker(null)
+      setUploadedMedia([])
+      setPrefilledSociety(initialSociety)
+      reset({
+        propertyType: 'FLAT',
+        pricingType: 'SALE',
+        societyBuildingName: initialSociety.societyBuildingName || '',
+        locationArea: initialSociety.locationArea || '',
+        pincode: initialSociety.pincode || '',
+        city: initialSociety.city || 'Mumbai',
+        floorNumber: '',
+        totalFloors: initialSociety.totalFloors ? String(initialSociety.totalFloors) : '',
+        bedrooms: '2',
+        bathrooms: '2',
+        balconies: '1',
+        carpetAreaSqFt: '',
+        superBuiltUpAreaSqFt: '',
+        askingPrice: '',
+        availabilityStatus: 'AVAILABLE',
+        availabilityDate: '',
+        accessType: 'DIRECT',
+        ownerId: null,
+        brokerId: null,
+        builderName: initialSociety.builderName || '',
+        yearOfConstruction: initialSociety.yearOfConstruction ? String(initialSociety.yearOfConstruction) : '',
+        totalUnits: initialSociety.totalUnits ? String(initialSociety.totalUnits) : '',
+        amenities: initialSociety.amenities && initialSociety.amenities.length
+          ? initialSociety.amenities
+          : ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
+        reraNumber: initialSociety.reraNumber || '',
+        notes: '',
+      })
     } else {
       // Check for saved local draft
       const savedDraft = localStorage.getItem(STORAGE_DRAFT_KEY)
@@ -308,7 +364,7 @@ export function PropertyFormModal({
       }
     }
     setErrorMessage(null)
-  }, [isOpen, initialProperty, reset])
+  }, [isOpen, initialProperty, initialSociety, reset])
 
   // ── Auto-Save Draft to LocalStorage ────────────────────────────────────────
   useEffect(() => {
@@ -350,6 +406,7 @@ export function PropertyFormModal({
     setPropertyId(crypto.randomUUID())
     setSelectedOwner(null)
     setSelectedBroker(null)
+    setPrefilledSociety(null)
     setUploadedMedia([])
     reset({
       propertyType: 'FLAT',
@@ -400,6 +457,37 @@ export function PropertyFormModal({
   const handleRemoveBroker = () => {
     setSelectedBroker(null)
     setValue('brokerId', null, { shouldValidate: true, shouldDirty: true })
+  }
+
+  // ── Society Selection & Auto-fill ──────────────────────────────────────────
+  const handleSelectSociety = (society: SocietyProfile) => {
+    setPrefilledSociety(society)
+    setValue('societyBuildingName', society.societyBuildingName, { shouldValidate: true, shouldDirty: true })
+    setValue('locationArea', society.locationArea, { shouldValidate: true, shouldDirty: true })
+    setValue('pincode', society.pincode, { shouldValidate: true, shouldDirty: true })
+    setValue('city', society.city || 'Mumbai', { shouldValidate: true, shouldDirty: true })
+    if (society.builderName) {
+      setValue('builderName', society.builderName, { shouldValidate: true, shouldDirty: true })
+    }
+    if (society.yearOfConstruction) {
+      setValue('yearOfConstruction', String(society.yearOfConstruction), { shouldValidate: true, shouldDirty: true })
+    }
+    if (society.totalFloors) {
+      setValue('totalFloors', String(society.totalFloors), { shouldValidate: true, shouldDirty: true })
+    }
+    if (society.totalUnits) {
+      setValue('totalUnits', String(society.totalUnits), { shouldValidate: true, shouldDirty: true })
+    }
+    if (society.reraNumber) {
+      setValue('reraNumber', society.reraNumber, { shouldValidate: true, shouldDirty: true })
+    }
+    if (society.amenities && society.amenities.length > 0) {
+      setValue('amenities', society.amenities, { shouldValidate: true, shouldDirty: true })
+    }
+    toast.success(
+      'Society Pre-filled!',
+      `Auto-populated building and location details from "${society.societyBuildingName}".`
+    )
   }
 
   // ── Amenities Toggle ───────────────────────────────────────────────────────
@@ -557,6 +645,122 @@ export function PropertyFormModal({
     }
   }
 
+  // ── Save & Add Another Unit in same Society ────────────────────────────────
+  const handleSaveAndAddAnother = async () => {
+    if (mediaBusy || hasFailedUploads) {
+      setErrorMessage('Wait for uploads to finish. Retry or cancel failed uploads in the upload panel before saving.')
+      return
+    }
+
+    await handleSubmit(async (data: PropertyFormValues) => {
+      setIsSavingAndAddingAnother(true)
+      setErrorMessage(null)
+
+      const parsedCarpet = parseFloat(data.carpetAreaSqFt)
+      const parsedPrice = parseFloat(data.askingPrice)
+
+      const payload: Partial<Property> = {
+        propertyType: data.propertyType,
+        pricingType: data.pricingType,
+        societyBuildingName: data.societyBuildingName.trim(),
+        locationArea: data.locationArea.trim(),
+        pincode: data.pincode.trim(),
+        city: data.city.trim() || 'Mumbai',
+        floorNumber: data.floorNumber ? parseInt(data.floorNumber, 10) : null,
+        totalFloors: data.totalFloors ? parseInt(data.totalFloors, 10) : null,
+        bedrooms: data.bedrooms ? parseInt(data.bedrooms, 10) : 2,
+        bathrooms: data.bathrooms ? parseInt(data.bathrooms, 10) : 2,
+        balconies: data.balconies ? parseInt(data.balconies, 10) : 1,
+        carpetAreaSqFt: parsedCarpet,
+        superBuiltUpAreaSqFt: data.superBuiltUpAreaSqFt ? parseFloat(data.superBuiltUpAreaSqFt) : null,
+        askingPrice: parsedPrice,
+        availabilityStatus: data.availabilityStatus,
+        availabilityDate: data.availabilityDate ? new Date(data.availabilityDate).toISOString() : null,
+        accessType: data.accessType,
+        ownerId: data.accessType === 'DIRECT' ? data.ownerId || null : null,
+        brokerId: data.accessType === 'BROKER' && data.brokerId ? data.brokerId : null,
+        builderName: data.builderName?.trim() || null,
+        yearOfConstruction: data.yearOfConstruction ? parseInt(data.yearOfConstruction, 10) : null,
+        totalUnits: data.totalUnits ? parseInt(data.totalUnits, 10) : null,
+        amenities: data.amenities || [],
+        reraNumber: data.reraNumber?.trim() || null,
+        notes: data.notes?.trim() || null,
+        isDraft: false,
+      }
+
+      try {
+        const draft = await ensureDraft(propertyId || crypto.randomUUID())
+        await updateProperty(draft.id, payload)
+        localStorage.removeItem(STORAGE_DRAFT_KEY)
+
+        toast.success(
+          'Listing Published!',
+          `Unit in ${payload.societyBuildingName} saved! Ready for next flat.`
+        )
+
+        onSuccess()
+
+        // Keep society information and access settings, reset unit-specific fields
+        const newPropertyId = crypto.randomUUID()
+        setPropertyId(newPropertyId)
+        draftPromiseRef.current = null
+        setUploadedMedia([])
+
+        setPrefilledSociety({
+          societyBuildingName: data.societyBuildingName,
+          locationArea: data.locationArea,
+          pincode: data.pincode,
+          city: data.city,
+          builderName: data.builderName || null,
+          yearOfConstruction: data.yearOfConstruction ? parseInt(data.yearOfConstruction, 10) : null,
+          totalFloors: data.totalFloors ? parseInt(data.totalFloors, 10) : null,
+          totalUnits: data.totalUnits ? parseInt(data.totalUnits, 10) : null,
+          reraNumber: data.reraNumber || null,
+          amenities: data.amenities || [],
+          propertyCount: 1,
+        })
+
+        reset({
+          propertyType: data.propertyType,
+          pricingType: data.pricingType,
+          societyBuildingName: data.societyBuildingName,
+          locationArea: data.locationArea,
+          pincode: data.pincode,
+          city: data.city,
+          floorNumber: '',
+          totalFloors: data.totalFloors || '',
+          bedrooms: '2',
+          bathrooms: '2',
+          balconies: '1',
+          carpetAreaSqFt: '',
+          superBuiltUpAreaSqFt: '',
+          askingPrice: '',
+          availabilityStatus: 'AVAILABLE',
+          availabilityDate: '',
+          accessType: data.accessType,
+          ownerId: data.accessType === 'DIRECT' ? data.ownerId || null : null,
+          brokerId: data.accessType === 'BROKER' && data.brokerId ? data.brokerId : null,
+          builderName: data.builderName || '',
+          yearOfConstruction: data.yearOfConstruction || '',
+          totalUnits: data.totalUnits || '',
+          amenities: data.amenities || ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
+          reraNumber: data.reraNumber || '',
+          notes: '',
+        })
+
+        setActiveTab('DETAILS')
+      } catch (err: unknown) {
+        handleFormApiError<PropertyFormValues>(err, {
+          setError,
+          setBannerError: setErrorMessage,
+          toastTitle: 'Failed to create property',
+        })
+      } finally {
+        setIsSavingAndAddingAnother(false)
+      }
+    })()
+  }
+
   if (!isOpen) return null
 
   const currentMediaRule = getMediaRuleForCategory(mediaCategoryTab)
@@ -699,6 +903,55 @@ export function PropertyFormModal({
               ══════════════════════════════════════════════════════════════════ */}
           {activeTab === 'DETAILS' && (
             <div className="space-y-5">
+              {/* Quick Pre-fill Selector Banner */}
+              {!initialProperty && (
+                <div className="p-3 bg-gradient-to-r from-gold/15 via-gold/5 to-surface-secondary border border-gold/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xs bg-gold/20 border border-gold/40 flex items-center justify-center text-gold shrink-0">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
+                          Pre-Fill From Existing Society
+                        </span>
+                        <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 bg-gold text-black font-mono">
+                          Quick Fill
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-muted-text truncate">
+                        {prefilledSociety
+                          ? `Pre-filled from "${prefilledSociety.societyBuildingName}" (Location, PIN, Builder, Specs & Amenities active)`
+                          : 'Adding another flat in Merlin, Oberoi, etc.? Auto-populate all repeated building data in 1 click.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
+                    {prefilledSociety && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setPrefilledSociety(null)
+                          toast.info('Pre-fill Reset', 'You can now enter custom society info or select another.')
+                        }}
+                        className="px-2.5 py-1.5 text-[9px] font-bold uppercase tracking-wider text-muted-text hover:text-foreground border border-border bg-surface transition-colors cursor-pointer"
+                      >
+                        Reset
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setIsSocietyModalOpen(true)}
+                      className="px-3 py-1.5 bg-gold hover:bg-gold-light text-black text-[10px] font-black uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>{prefilledSociety ? 'Change Society' : 'Select Society'}</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Row 1: Property Type & Pricing Type */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -774,9 +1027,20 @@ export function PropertyFormModal({
               {/* Row 2: Society Name & Pin Code */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="sm:col-span-2">
-                  <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text mb-1.5">
-                    Society / Building Name <span className="text-gold">*</span>
-                  </label>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text">
+                      Society / Building Name <span className="text-gold">*</span>
+                    </label>
+                    {!initialProperty && (
+                      <button
+                        type="button"
+                        onClick={() => setIsSocietyModalOpen(true)}
+                        className="text-[9px] font-bold uppercase tracking-wider text-gold hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <Sparkles className="w-2.5 h-2.5" /> Pre-fill from existing
+                      </button>
+                    )}
+                  </div>
                   <input
                     type="text"
                     {...register('societyBuildingName')}
@@ -1436,9 +1700,27 @@ export function PropertyFormModal({
                 </button>
               )}
 
+              {/* Save & Add Another Flat in Society */}
+              {!initialProperty && (
+                <button
+                  type="button"
+                  onClick={handleSaveAndAddAnother}
+                  disabled={isSubmitting || isSavingAndAddingAnother || mediaBusy || hasFailedUploads}
+                  className="px-4 py-2 bg-surface-secondary hover:bg-gold/15 text-foreground hover:text-gold border border-border hover:border-gold/40 text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                  title="Publish this listing and keep society info ready to add the next flat in the same building"
+                >
+                  {isSavingAndAddingAnother ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-gold" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5 text-gold" />
+                  )}
+                  <span>{isSavingAndAddingAnother ? 'Publishing Unit...' : 'Publish & Add Next Flat'}</span>
+                </button>
+              )}
+
               <button
                 type="submit"
-                disabled={isSubmitting || mediaBusy || hasFailedUploads}
+                disabled={isSubmitting || isSavingAndAddingAnother || mediaBusy || hasFailedUploads}
                 className="px-5 py-2 bg-gold hover:bg-gold-light text-black text-[10px] font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-xs cursor-pointer disabled:opacity-50"
               >
                 {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
@@ -1475,6 +1757,12 @@ export function PropertyFormModal({
         onClose={() => setIsBrokerModalOpen(false)}
         onSelectBroker={handleSelectBroker}
         selectedBrokerId={selectedBroker?.id}
+      />
+      <SocietySelectModal
+        isOpen={isSocietyModalOpen}
+        onClose={() => setIsSocietyModalOpen(false)}
+        onSelectSociety={handleSelectSociety}
+        currentSocietyName={watch('societyBuildingName')}
       />
     </div>
   )

@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Building2, ChevronLeft, ChevronRight, ExternalLink, Loader2 } from 'lucide-react'
 import { getLinkedProperties } from '../../api/directory'
-import { getApiErrorMessage } from '../../utils/errorHandler'
+import { getApiErrorMessage, isPermissionOrAccessError } from '../../utils/errorHandler'
 import { formatIndianCurrency } from '../../utils/formatters'
 import type { LinkedPropertiesResponse } from '../../types/directory'
 
@@ -23,7 +23,20 @@ export function LinkedPropertiesList({ kind, id }: { kind: 'owner' | 'broker'; i
   return <section className="px-4 py-4">
     <h4 className="mb-3 flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text"><Building2 className="h-3 w-3 text-gold" />Linked Properties {data ? `(${data.pagination.total})` : ''}</h4>
     {loading ? <div role="status" className="flex items-center gap-2 py-4 text-xs text-muted-text"><Loader2 className="h-4 w-4 animate-spin text-gold" />Loading properties...</div>
-      : error ? <p role="alert" className="text-xs text-red-500">{error} <button type="button" className="underline" onClick={() => { setLoading(true); setAttempt(attempt + 1) }}>Retry</button></p>
+      : error ? (
+        <div role="alert" className="py-2 text-xs text-red-400">
+          <p className="leading-relaxed">{error}</p>
+          {!isPermissionOrAccessError(error) && (
+            <button
+              type="button"
+              className="mt-1.5 underline font-bold text-foreground hover:text-gold cursor-pointer"
+              onClick={() => { setLoading(true); setAttempt(attempt + 1) }}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      )
       : !data?.properties.length ? <p className="text-xs text-muted-text">No listed properties linked yet. Link this {kind} when adding or editing a property.</p>
       : <div className="divide-y divide-border border border-border">
         {data.properties.map((property) => <Link key={property.id} href={`/dashboard/properties?propertyId=${encodeURIComponent(property.id)}`}

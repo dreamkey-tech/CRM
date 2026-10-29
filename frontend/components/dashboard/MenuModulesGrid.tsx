@@ -11,9 +11,11 @@ import {
   WalletCards,
   CheckSquare2,
   ArrowRight,
+  Shield,
 } from 'lucide-react'
 import { toast } from '../../utils/toast'
 import { useThemeStore } from '../../store/useThemeStore'
+import { useAuthStore } from '../../store/useAuthStore'
 import { getWebsiteUserStats } from '../../api/websiteUsers'
 import { getOwnerStats } from '../../api/owners'
 import { getBrokerStats } from '../../api/brokers'
@@ -27,10 +29,12 @@ interface MenuModule {
   icon: React.ComponentType<{ className?: string }>
   image: string
   href?: string
+  requiredPermission?: string
 }
 
 export function MenuModulesGrid() {
   const { theme } = useThemeStore()
+  const { hasPermission } = useAuthStore()
   const isDark = theme === 'dark'
   const router = useRouter()
   const [websiteUserCount, setWebsiteUserCount] = useState<number | null>(null)
@@ -66,6 +70,7 @@ export function MenuModulesGrid() {
       icon: Building2,
       image: 'Golden Hour Modern Villa Retreat.png',
       href: '/dashboard/properties',
+      requiredPermission: 'properties:read',
     },
     {
       id: 'clients',
@@ -75,6 +80,7 @@ export function MenuModulesGrid() {
       icon: Users2,
       image: 'Luxury Office Handshake at Sunset.png',
       href: '/dashboard/clients',
+      requiredPermission: 'clients:read',
     },
     {
       id: 'brokers',
@@ -87,6 +93,7 @@ export function MenuModulesGrid() {
       icon: Handshake,
       image: 'Golden-Hour Real Estate Deal.png',
       href: '/dashboard/brokers',
+      requiredPermission: 'brokers:read',
     },
     {
       id: 'owners',
@@ -96,6 +103,17 @@ export function MenuModulesGrid() {
       badge: ownerCount !== null ? `${ownerCount.toLocaleString()} Registered Owners` : 'Owner Directory',
       icon: KeyRound,
       image: 'Keys to Ownership at Golden Hour.png',
+      requiredPermission: 'owners:read',
+    },
+    {
+      id: 'organization',
+      title: 'Organization',
+      description: 'Super Admin: manage employee permissions and live system audit logs.',
+      badge: 'Staff & Audit Trails',
+      icon: Shield,
+      image: 'Executive Boardroom Leadership.jpg',
+      href: '/dashboard/organization',
+      requiredPermission: 'employees:manage',
     },
     {
       id: 'finance',
@@ -104,6 +122,7 @@ export function MenuModulesGrid() {
       badge: 'Commission & Cash Flow',
       icon: WalletCards,
       image: 'Golden-Hour Finance Desk with City Skyline.png',
+      requiredPermission: 'finance:read',
     },
     {
       id: 'followups',
@@ -123,8 +142,13 @@ export function MenuModulesGrid() {
       icon: Users2,
       image: 'user2.png',
       href: '/dashboard/website-users',
+      requiredPermission: 'users:read',
     },
   ]
+
+  const visibleModules = modules.filter(
+    (m) => !m.requiredPermission || hasPermission(m.requiredPermission)
+  )
 
   const handleModuleClick = (item: MenuModule) => {
     if (item.href) {
@@ -152,7 +176,7 @@ export function MenuModulesGrid() {
 
       {/* 3x2 Grid of Module Cards with Side-Blur Background Images */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {modules.map((item) => {
+        {visibleModules.map((item) => {
           const Icon = item.icon
           return (
             <div

@@ -24,10 +24,13 @@ import {
   Loader2,
   X,
   ChevronDown,
+  ShieldAlert,
 } from 'lucide-react'
+import Link from 'next/link'
 import { useThemeStore } from '../../store/useThemeStore'
+import { useAuthStore } from '../../store/useAuthStore'
 import { toast } from '../../utils/toast'
-import { getApiErrorMessage } from '../../utils/errorHandler'
+import { getApiErrorMessage, isPermissionOrAccessError } from '../../utils/errorHandler'
 import { getBrokersList, getBrokerStats, getBrokerById } from '../../api/brokers'
 import { BrokerStatusBadge } from './BrokerStatusBadge'
 import { BrokersStatsRow } from './BrokersStatsRow'
@@ -260,6 +263,7 @@ function SortDropdown({ value, order, onChangeSort, onToggleOrder }: SortDropdow
 
 export function BrokersView() {
   const { theme } = useThemeStore()
+  const { hasPermission } = useAuthStore()
   const isDark = theme === 'dark'
 
   // Data
@@ -395,8 +399,24 @@ export function BrokersView() {
     fetchStats()
   }
 
-  const handleOpenAddModal = () => { setBrokerToEdit(null); setIsFormModalOpen(true) }
-  const handleOpenEditModal = (broker: Broker) => { setBrokerToEdit(broker); setIsFormModalOpen(true) }
+  const handleOpenAddModal = () => {
+    if (!hasPermission('brokers:create')) {
+      toast.error('Permission Denied', 'You do not have permission to add brokers.')
+      return
+    }
+    setBrokerToEdit(null)
+    setIsFormModalOpen(true)
+  }
+
+  const handleOpenEditModal = (broker: Broker) => {
+    if (!hasPermission('brokers:update')) {
+      toast.error('Permission Denied', 'You do not have permission to edit brokers.')
+      return
+    }
+    setBrokerToEdit(broker)
+    setIsFormModalOpen(true)
+  }
+
   const linkedBrokerId = searchParams.get('brokerId')
   useEffect(() => {
     if (!linkedBrokerId) return
@@ -406,7 +426,15 @@ export function BrokersView() {
   }, [linkedBrokerId])
 
   const handleOpenDetailModal = (broker: Broker) => { setSelectedBroker(broker); setIsDetailModalOpen(true) }
-  const handleOpenDeleteModal = (broker: Broker) => { setBrokerToDelete(broker); setIsDeleteModalOpen(true) }
+
+  const handleOpenDeleteModal = (broker: Broker) => {
+    if (!hasPermission('brokers:delete')) {
+      toast.error('Permission Denied', 'You do not have permission to delete brokers.')
+      return
+    }
+    setBrokerToDelete(broker)
+    setIsDeleteModalOpen(true)
+  }
 
   const handleFormSuccess = (broker: Broker) => { setSelectedBroker(current => current?.id === broker.id ? broker : current); fetchBrokers(); fetchStats() }
   const handleDeleteSuccess = () => {
@@ -422,7 +450,30 @@ export function BrokersView() {
     { value: 'BLOCKED', label: 'Blocked' },
   ]
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  if (!hasPermission('brokers:read')) {
+    return (
+      <div className="space-y-6">
+        <Breadcrumb items={[{ label: 'Home', href: '/dashboard' }, { label: 'Brokers' }]} />
+        <div className="flex flex-col min-h-[420px] items-center justify-center border border-border bg-surface p-8 text-center">
+          <div className="w-14 h-14 border border-border flex items-center justify-center mb-4 bg-surface-secondary text-gold">
+            <ShieldAlert className="w-6 h-6" />
+          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground mb-2">
+            Broker Directory Access Restricted
+          </h2>
+          <p className="text-xs text-muted-text max-w-md leading-relaxed mb-6">
+            You do not have permission to view the broker directory. If you require access to channel partners and broker contacts, please contact your CRM administrator or manager.
+          </p>
+          <Link
+            href="/dashboard"
+            className="px-5 py-2.5 bg-surface-secondary border border-border text-foreground hover:border-gold hover:text-gold text-[10px] font-bold uppercase tracking-wider transition-colors inline-flex items-center gap-2"
+          >
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5">
@@ -453,14 +504,16 @@ export function BrokersView() {
         </div>
 
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-1.5 px-4 py-2 bg-gold text-background text-[10px] font-bold uppercase tracking-wider hover:bg-primary-hover transition-colors"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            Add Broker
-          </button>
+          {hasPermission('brokers:create') && (
+            <button
+              type="button"
+              onClick={handleOpenAddModal}
+              className="flex items-center gap-1.5 px-4 py-2 bg-gold text-background text-[10px] font-bold uppercase tracking-wider hover:bg-primary-hover transition-colors"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              Add Broker
+            </button>
+          )}
         </div>
       </div>
 
@@ -573,7 +626,20 @@ export function BrokersView() {
       {/* ── 4. Table / States ── */}
       {isLoading ? (
         <TableSkeleton rows={pagination.limit || 8} columns={7} />
-      ) : listError ? <div role="alert" className="border border-border bg-surface p-8 text-center text-xs text-red-500">{listError}<button type="button" onClick={handleRefresh} className="ml-2 underline">Retry</button></div> : brokers.length === 0 ? (
+      ) : listError ? (
+        <div role="alert" className="border border-border bg-surface p-8 text-center text-xs text-red-400">
+          <p className="leading-relaxed">{listError}</p>
+          {!isPermissionOrAccessError(listError) && (
+            <button
+              type="button"
+              onClick={handleRefresh}
+              className="mt-3 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider border border-border bg-surface-secondary text-foreground hover:bg-surface transition-colors cursor-pointer"
+            >
+              Retry Connection
+            </button>
+          )}
+        </div>
+      ) : brokers.length === 0 ? (
         <div className="flex flex-col items-center justify-center min-h-[320px] bg-surface border border-border text-center px-4 py-12">
           <div className="w-12 h-12 border border-border flex items-center justify-center mb-4">
             <Handshake className="w-5 h-5 text-muted-text" />
@@ -760,22 +826,26 @@ export function BrokersView() {
                           >
                             <Eye className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenEditModal(broker)}
-                            className="w-7 h-7 flex items-center justify-center text-muted-text hover:text-gold hover:bg-gold/10 transition-colors"
-                            title="Edit Broker"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleOpenDeleteModal(broker)}
-                            className="w-7 h-7 flex items-center justify-center text-muted-text hover:text-red-500 transition-colors"
-                            title="Delete Broker"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {hasPermission('brokers:update') && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenEditModal(broker)}
+                              className="w-7 h-7 flex items-center justify-center text-muted-text hover:text-gold hover:bg-gold/10 transition-colors"
+                              title="Edit Broker"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                          {hasPermission('brokers:delete') && (
+                            <button
+                              type="button"
+                              onClick={() => handleOpenDeleteModal(broker)}
+                              className="w-7 h-7 flex items-center justify-center text-muted-text hover:text-red-500 transition-colors"
+                              title="Delete Broker"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

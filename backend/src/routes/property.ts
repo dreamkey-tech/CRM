@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import type { AppEnv } from '../db'
-import { authMiddleware } from '../middleware/auth'
+import { authMiddleware, requirePermission } from '../middleware/auth'
 import { directoryIdSchema } from '../lib/directory'
 import { zodValidationHook } from '../lib/validator'
 import {
@@ -33,6 +33,7 @@ import {
   createPropertyFilterPresetController,
   deletePropertyFilterPresetController,
   getPropertyStatsController,
+  listDistinctSocietiesController,
 } from '../controllers/property.controller'
 
 export const propertyRoutes = new Hono<AppEnv>()
@@ -44,13 +45,13 @@ propertyRoutes.use('*', authMiddleware)
  * 0. GET /v1/properties/stats
  * Returns high-level aggregated property statistics
  */
-propertyRoutes.get('/stats', getPropertyStatsController)
+propertyRoutes.get('/stats', requirePermission('properties:read'), getPropertyStatsController)
 
 /**
  * 1. GET /v1/properties/config/media-limits
  * Returns dynamic media upload limits (maxMB, maxCount, allowed mime types)
  */
-propertyRoutes.get('/config/media-limits', getPropertyMediaConfigController)
+propertyRoutes.get('/config/media-limits', requirePermission('properties:read'), getPropertyMediaConfigController)
 
 /**
  * 2. POST /v1/properties/media/upload-urls
@@ -58,19 +59,17 @@ propertyRoutes.get('/config/media-limits', getPropertyMediaConfigController)
  */
 propertyRoutes.post(
   '/media/upload-urls',
+  requirePermission('properties:create'),
   zValidator('json', generateUploadUrlsSchema, zodValidationHook),
   generatePropertyUploadUrlsController
 )
 
 /**
  * 3. Filter Presets (FR-SF-09)
- * GET /v1/properties/filters/presets - List saved presets
- * POST /v1/properties/filters/presets - Save a new preset
- * DELETE /v1/properties/filters/presets/:presetId - Delete preset
  */
-propertyRoutes.get('/filters/presets', listPropertyFilterPresetsController)
-propertyRoutes.post('/filters/presets', createPropertyFilterPresetController)
-propertyRoutes.delete('/filters/presets/:presetId', deletePropertyFilterPresetController)
+propertyRoutes.get('/filters/presets', requirePermission('properties:read'), listPropertyFilterPresetsController)
+propertyRoutes.post('/filters/presets', requirePermission('properties:create'), createPropertyFilterPresetController)
+propertyRoutes.delete('/filters/presets/:presetId', requirePermission('properties:delete'), deletePropertyFilterPresetController)
 
 /**
  * 4. POST /v1/properties/draft
@@ -78,6 +77,7 @@ propertyRoutes.delete('/filters/presets/:presetId', deletePropertyFilterPresetCo
  */
 propertyRoutes.post(
   '/draft',
+  requirePermission('properties:create'),
   zValidator('json', createPropertyDraftSchema, zodValidationHook),
   createPropertyDraftController
 )
@@ -88,6 +88,7 @@ propertyRoutes.post(
  */
 propertyRoutes.get(
   '/',
+  requirePermission('properties:read'),
   zValidator('query', propertyFilterQuerySchema, zodValidationHook),
   listPropertiesController
 )
@@ -98,15 +99,26 @@ propertyRoutes.get(
  */
 propertyRoutes.post(
   '/',
+  requirePermission('properties:create'),
   zValidator('json', createPropertySchema, zodValidationHook),
   createPropertyController
+)
+
+/**
+ * 6.1 GET /v1/properties/societies/profiles
+ * Retrieve distinct societies/buildings with their shared metadata for quick pre-fill
+ */
+propertyRoutes.get(
+  '/societies/profiles',
+  requirePermission('properties:read'),
+  listDistinctSocietiesController
 )
 
 /**
  * 7. GET /v1/properties/:id
  * Retrieve full property details by ID (with media, broker, partner, audit logs)
  */
-propertyRoutes.get('/:id', zValidator('param', directoryIdSchema, zodValidationHook), getPropertyByIdController)
+propertyRoutes.get('/:id', requirePermission('properties:read'), zValidator('param', directoryIdSchema, zodValidationHook), getPropertyByIdController)
 
 /**
  * 8. PUT /v1/properties/:id
@@ -114,6 +126,7 @@ propertyRoutes.get('/:id', zValidator('param', directoryIdSchema, zodValidationH
  */
 propertyRoutes.put(
   '/:id',
+  requirePermission('properties:update'),
   zValidator('param', directoryIdSchema, zodValidationHook),
   zValidator('json', updatePropertySchema, zodValidationHook),
   updatePropertyController
@@ -121,10 +134,11 @@ propertyRoutes.put(
 
 /**
  * 9. PATCH /v1/properties/:id/status
- * Quick update for listing availability status (Available, Under Negotiation, Token Paid, Sold, etc.)
+ * Quick update for listing availability status
  */
 propertyRoutes.patch(
   '/:id/status',
+  requirePermission('properties:update'),
   zValidator('json', updatePropertyStatusSchema, zodValidationHook),
   updatePropertyStatusController
 )
@@ -133,9 +147,9 @@ propertyRoutes.patch(
  * 10. POST /v1/properties/:id/media
  * Attach newly completed background media uploads to an existing property/draft
  */
-propertyRoutes.post('/:id/media/discard-upload', discardPropertyUploadController)
+propertyRoutes.post('/:id/media/discard-upload', requirePermission('properties:update'), discardPropertyUploadController)
 
-propertyRoutes.post('/:id/media', zValidator('json', attachPropertyMediaSchema, zodValidationHook), attachPropertyMediaController)
+propertyRoutes.post('/:id/media', requirePermission('properties:update'), zValidator('json', attachPropertyMediaSchema, zodValidationHook), attachPropertyMediaController)
 
 /**
  * 11. PUT /v1/properties/:id/media/reorder
@@ -143,6 +157,7 @@ propertyRoutes.post('/:id/media', zValidator('json', attachPropertyMediaSchema, 
  */
 propertyRoutes.put(
   '/:id/media/reorder',
+  requirePermission('properties:update'),
   zValidator('json', reorderPropertyMediaSchema, zodValidationHook),
   reorderPropertyMediaController
 )
@@ -151,16 +166,16 @@ propertyRoutes.put(
  * 12. DELETE /v1/properties/:id/media/:mediaId
  * Deletes a single media item from DB and deletes the object from Cloudflare R2
  */
-propertyRoutes.delete('/:id/media/:mediaId', deletePropertyMediaController)
+propertyRoutes.delete('/:id/media/:mediaId', requirePermission('properties:delete'), deletePropertyMediaController)
 
 /**
  * 13. PATCH /v1/properties/:id/archive
  * Toggle archive/restore state without deleting listing history
  */
-propertyRoutes.patch('/:id/archive', toggleArchivePropertyController)
+propertyRoutes.patch('/:id/archive', requirePermission('properties:update'), toggleArchivePropertyController)
 
 /**
  * 14. DELETE /v1/properties/:id
  * Permanently delete property from DB and batch-purge all associated media from R2
  */
-propertyRoutes.delete('/:id', zValidator('param', directoryIdSchema, zodValidationHook), deletePropertyController)
+propertyRoutes.delete('/:id', requirePermission('properties:delete'), zValidator('param', directoryIdSchema, zodValidationHook), deletePropertyController)

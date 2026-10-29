@@ -128,3 +128,56 @@ test('presigning refuses a nonexistent property', async () => {
   const c = context({ property: { findUnique: async () => null } }, { propertyId, files: [] })
   assert.equal((await loadController().generatePropertyUploadUrlsController(c)).status, 404)
 })
+
+test('listDistinctSocietiesController returns grouped societies with count and metadata', async () => {
+  const sampleSocieties = [
+    { societyBuildingName: 'Merlin Cambridge', _count: { id: 12 } },
+    { societyBuildingName: 'Oberoi Sky City', _count: { id: 5 } },
+  ]
+  const sampleDetails = [
+    {
+      societyBuildingName: 'Merlin Cambridge',
+      locationArea: 'Tollygunge',
+      pincode: '700033',
+      city: 'Kolkata',
+      builderName: 'Merlin Group',
+      yearOfConstruction: 2021,
+      totalFloors: 25,
+      totalUnits: 120,
+      reraNumber: 'WBRERA/P/1234',
+      amenities: ['Gymnasium', 'Swimming Pool'],
+    },
+    {
+      societyBuildingName: 'Oberoi Sky City',
+      locationArea: 'Borivali East',
+      pincode: '400066',
+      city: 'Mumbai',
+      builderName: 'Oberoi Realty',
+      yearOfConstruction: 2022,
+      totalFloors: 60,
+      totalUnits: 300,
+      reraNumber: 'P51800001234',
+      amenities: ['Clubhouse', 'Gymnasium'],
+    },
+  ]
+
+  const prisma = {
+    property: {
+      groupBy: async () => sampleSocieties,
+      findMany: async () => sampleDetails,
+    },
+  }
+
+  const c = context(prisma, {})
+  c.req.query = (name) => name === 'q' ? 'Merlin' : undefined
+
+  const res = await loadController().listDistinctSocietiesController(c)
+  assert.equal(res.status, 200)
+  assert.equal(res.body.success, true)
+  assert.equal(res.body.societies.length, 2)
+  assert.equal(res.body.societies[0].societyBuildingName, 'Merlin Cambridge')
+  assert.equal(res.body.societies[0].propertyCount, 12)
+  assert.equal(res.body.societies[0].locationArea, 'Tollygunge')
+  assert.equal(res.body.societies[0].builderName, 'Merlin Group')
+})
+

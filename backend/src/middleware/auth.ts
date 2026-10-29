@@ -161,6 +161,55 @@ export const optionalAuthMiddleware = createMiddleware<AppEnv>(async (c, next) =
 })
 
 /**
+ * Translates technical atomic permission strings into plain-English, non-technical feature descriptions
+ */
+export function getHumanReadablePermissionDescription(permission: string): string {
+  const map: Record<string, string> = {
+    'properties:read': 'view property listings',
+    'properties:create': 'add new properties',
+    'properties:update': 'edit properties',
+    'properties:delete': 'delete properties',
+    'clients:read': 'view the client directory',
+    'clients:create': 'register new clients',
+    'clients:update': 'edit client details',
+    'clients:delete': 'delete clients',
+    'clients:documents:view_sensitive': 'view confidential client documents (KYC / Aadhaar)',
+    'brokers:read': 'view the broker directory',
+    'brokers:create': 'add new brokers',
+    'brokers:update': 'edit brokers',
+    'brokers:delete': 'delete brokers',
+    'owners:read': 'view property owners',
+    'owners:create': 'add property owners',
+    'owners:update': 'edit property owners',
+    'owners:delete': 'delete property owners',
+    'finance:read': 'view financial ledgers & reports',
+    'finance:manage': 'manage financial transactions',
+    'employees:read': 'view staff members & organization access',
+    'employees:manage': 'manage staff accounts & permissions',
+    'audit:read': 'view system audit logs',
+    'settings:read': 'view system settings',
+    'settings:update': 'update system settings',
+    'roles:read': 'view security roles',
+    'roles:create': 'create security roles',
+    'roles:update': 'modify security roles',
+    'roles:delete': 'delete security roles',
+  }
+
+  if (map[permission]) {
+    return map[permission]
+  }
+
+  const parts = permission.split(':')
+  if (parts.length >= 2) {
+    const action = parts[parts.length - 1]
+    const module = parts[0]
+    return `${action} ${module}`
+  }
+
+  return 'access this section'
+}
+
+/**
  * Permission Guard Middleware
  * Ensures the authenticated user has a specific atomic permission (or Super Admin `*:*` access).
  */
@@ -172,10 +221,11 @@ export function requirePermission(requiredPermission: string) {
     const hasAccess = userPermissions.includes('*:*') || userPermissions.includes(requiredPermission)
 
     if (!hasAccess) {
+      const featureDesc = getHumanReadablePermissionDescription(requiredPermission)
       return c.json(
         {
           success: false,
-          error: `You do not have permission to access this feature (${requiredPermission}). Please contact your CRM administrator if you need access.`,
+          error: `You do not have permission to ${featureDesc}. Please contact your CRM administrator if you need access.`,
           code: 'PERMISSION_DENIED',
           requiredPermission,
         },

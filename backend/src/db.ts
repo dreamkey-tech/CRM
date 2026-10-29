@@ -16,6 +16,8 @@ export type Bindings = {
   R2_PUBLIC_DOMAIN?: string
   R2_PUBLIC_URL?: string
   R2_CLIENT_DOCUMENTS_BUCKET?: string
+  RESEND_API_KEY?: string
+  EMAIL_FROM?: string
 }
 
 export type AuthUser = {

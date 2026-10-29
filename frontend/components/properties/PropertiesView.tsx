@@ -29,6 +29,7 @@ import {
 import { useRouter } from '../../context/NavigationLoaderContext'
 import { useDebounce } from '../../utils/useDebounce'
 import { toast } from '../../utils/toast'
+import { useAuthStore } from '../../store/useAuthStore'
 import { handleActionApiError } from '../../utils/errorHandler'
 import {
   getProperties,
@@ -53,6 +54,7 @@ import type {
   PropertyFilterParams,
   PropertyPagination,
   PropertyFilterPreset,
+  SocietyProfile,
 } from '../../types/property'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -213,6 +215,7 @@ const BUDGET_OPTIONS = [
 
 export function PropertiesView() {
   const router = useRouter()
+  const { hasPermission } = useAuthStore()
 
   // ── States ─────────────────────────────────────────────────────────────────
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table')
@@ -264,6 +267,7 @@ export function PropertiesView() {
   // Modals
   const [isFormModalOpen, setIsFormModalOpen] = useState(false)
   const [editingProperty, setEditingProperty] = useState<Property | null>(null)
+  const [initialSocietyForForm, setInitialSocietyForForm] = useState<SocietyProfile | null>(null)
   const [selectedPropertyDetail, setSelectedPropertyDetail] = useState<Property | null>(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [deletingProperty, setDeletingProperty] = useState<Property | null>(null)
@@ -446,21 +450,75 @@ export function PropertiesView() {
     catch (error) { handleActionApiError(error, 'Unable to load property details') }
   }
 
+  const handleOpenCreate = () => {
+    if (!hasPermission('properties:create')) {
+      toast.error('Permission Denied', 'You do not have permission to add properties.')
+      return
+    }
+    setEditingProperty(null)
+    setInitialSocietyForForm(null)
+    setIsFormModalOpen(true)
+  }
+
+  const handleAddUnitInSociety = (property: Property) => {
+    if (!hasPermission('properties:create')) {
+      toast.error('Permission Denied', 'You do not have permission to add properties.')
+      return
+    }
+    setEditingProperty(null)
+    setInitialSocietyForForm({
+      societyBuildingName: property.societyBuildingName,
+      locationArea: property.locationArea,
+      pincode: property.pincode,
+      city: property.city,
+      builderName: property.builderName || null,
+      yearOfConstruction: property.yearOfConstruction || null,
+      totalFloors: property.totalFloors || null,
+      totalUnits: property.totalUnits || null,
+      reraNumber: property.reraNumber || null,
+      amenities: property.amenities || [],
+      propertyCount: 1,
+    })
+    setIsDetailModalOpen(false)
+    setIsFormModalOpen(true)
+  }
+
   const handleOpenEdit = (prop: Property, e?: React.MouseEvent) => {
     e?.stopPropagation()
+    if (!hasPermission('properties:update')) {
+      toast.error('Permission Denied', 'You do not have permission to edit properties.')
+      return
+    }
     setEditingProperty(prop)
     setIsFormModalOpen(true)
   }
 
   const handleOpenDelete = (prop: Property, e?: React.MouseEvent) => {
     e?.stopPropagation()
+    if (!hasPermission('properties:delete')) {
+      toast.error('Permission Denied', 'You do not have permission to delete properties.')
+      return
+    }
     setDeletingProperty(prop)
     setIsDeleteModalOpen(true)
   }
 
   const handleBrokerClick = (brokerId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    if (!hasPermission('brokers:read')) {
+      toast.error('Permission Denied', 'You do not have permission to view the broker directory.')
+      return
+    }
     router.push(`/dashboard/brokers?brokerId=${encodeURIComponent(brokerId)}`)
+  }
+
+  const handleOwnerClick = (ownerId: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!hasPermission('owners:read')) {
+      toast.error('Permission Denied', 'You do not have permission to view property owners.')
+      return
+    }
+    router.push(`/dashboard/owners?ownerId=${encodeURIComponent(ownerId)}`)
   }
 
   // Active filters count
@@ -513,10 +571,7 @@ export function PropertiesView() {
 
           <button
             type="button"
-            onClick={() => {
-              setEditingProperty(null)
-              setIsFormModalOpen(true)
-            }}
+            onClick={handleOpenCreate}
             className="px-4 py-2 bg-gold hover:bg-gold-light text-black text-xs font-bold uppercase tracking-wider transition-colors flex items-center gap-2 shadow-xs cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
@@ -781,10 +836,7 @@ export function PropertiesView() {
             ) : null}
             <button
               type="button"
-              onClick={() => {
-                setEditingProperty(null)
-                setIsFormModalOpen(true)
-              }}
+              onClick={handleOpenCreate}
               className="px-4 py-2 bg-gold hover:bg-gold-light text-black text-xs font-bold uppercase tracking-wider cursor-pointer"
             >
               + Add Property
@@ -908,7 +960,7 @@ export function PropertiesView() {
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface-secondary border border-border text-[9px] font-bold uppercase tracking-wider text-muted-text">
                           <span className="w-1.5 h-1.5 bg-emerald-500" />
-                          {property.owner ? <button type="button" onClick={event => { event.stopPropagation(); router.push(`/dashboard/owners?ownerId=${property.owner!.id}`) }} className="text-gold hover:underline">{property.owner.name}</button> : 'Owner not linked'}
+                          {property.owner ? <button type="button" onClick={event => handleOwnerClick(property.owner!.id, event)} className="text-gold hover:underline cursor-pointer">{property.owner.name}</button> : 'Owner not linked'}
                         </span>
                       )}
                     </td>
@@ -1106,7 +1158,7 @@ export function PropertiesView() {
                     ) : (
                       <div className="text-[10px] font-mono text-muted-text flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-emerald-500 shrink-0" />
-                        {property.owner ? <button type="button" onClick={event => { event.stopPropagation(); router.push(`/dashboard/owners?ownerId=${property.owner!.id}`) }} className="text-gold hover:underline">{property.owner.name}</button> : 'Owner not linked'}
+                        {property.owner ? <button type="button" onClick={event => handleOwnerClick(property.owner!.id, event)} className="text-gold hover:underline cursor-pointer">{property.owner.name}</button> : 'Owner not linked'}
                       </div>
                     )}
 
@@ -1200,9 +1252,11 @@ export function PropertiesView() {
       <PropertyFormModal
         isOpen={isFormModalOpen}
         initialProperty={editingProperty}
+        initialSociety={initialSocietyForForm}
         onClose={() => {
           setIsFormModalOpen(false)
           setEditingProperty(null)
+          setInitialSocietyForForm(null)
         }}
         onSuccess={() => {
           fetchPropertiesList(pagination.page)
@@ -1218,12 +1272,22 @@ export function PropertiesView() {
           setSelectedPropertyDetail(null)
         }}
         onEdit={(prop) => {
+          if (!hasPermission('properties:update')) {
+            toast.error('Permission Denied', 'You do not have permission to edit properties.')
+            return
+          }
           setIsDetailModalOpen(false)
           setSelectedPropertyDetail(null)
           setEditingProperty(prop)
+          setInitialSocietyForForm(null)
           setIsFormModalOpen(true)
         }}
+        onAddUnitInSociety={handleAddUnitInSociety}
         onDelete={(prop) => {
+          if (!hasPermission('properties:delete')) {
+            toast.error('Permission Denied', 'You do not have permission to delete properties.')
+            return
+          }
           setIsDetailModalOpen(false)
           setSelectedPropertyDetail(null)
           setDeletingProperty(prop)

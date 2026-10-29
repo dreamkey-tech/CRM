@@ -10,6 +10,7 @@ import {
   ChevronDown,
   User,
   ShieldCheck,
+  Shield,
   LogOut,
   Calendar,
   Building,
@@ -28,7 +29,7 @@ export function DashboardHeader({
   activeTab = 'Overview',
   setActiveTab,
 }: DashboardHeaderProps) {
-  const { user, logout } = useAuthStore()
+  const { user, logout, hasPermission } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
@@ -69,7 +70,7 @@ export function DashboardHeader({
 
   return (
     <header className="w-full bg-surface border-b border-border/80 fixed top-0 z-40 shadow-xs transition-colors duration-200">
-      <div className="max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+      <div className="max-w-9xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
         {/* ── Left: Brand Identity ── */}
         <div className="flex items-center gap-6 shrink-0">
           <Link href="/dashboard" className="flex flex-col items-center  group">
@@ -200,13 +201,22 @@ export function DashboardHeader({
                       setProfileOpen(false)
                       toast.info('Account Settings', 'User Profile & Security settings.')
                     }}
-                    className="w-full flex items-center gap-2.5 px-3 py-2  text-foreground hover:bg-surface-secondary transition text-left cursor-pointer"
+                    className="w-full flex items-center gap-2.5 px-3 py-2 text-foreground hover:bg-surface-secondary transition text-left cursor-pointer"
                   >
                     <User className="w-4 h-4 text-muted-text" />
                     <span>Account Profile</span>
                   </button>
 
-                 
+                  {hasPermission('employees:manage') && (
+                    <Link
+                      href="/dashboard/organization"
+                      onClick={() => setProfileOpen(false)}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-foreground hover:bg-surface-secondary transition text-left cursor-pointer"
+                    >
+                      <Shield className="w-4 h-4 text-gold" />
+                      <span>Organization & Staff</span>
+                    </Link>
+                  )}
                 </div>
 
                 <div className="border-t border-border/80 mt-2 pt-2">

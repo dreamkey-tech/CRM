@@ -4,25 +4,43 @@ export const SYSTEM_PERMISSIONS = [
   // Super Admin Wildcard
   { name: '*:*', category: 'ALL', description: 'Full access to all system resources and actions' },
 
-  // Leads
-  { name: 'leads:read', category: 'LEADS', description: 'View and search leads' },
-  { name: 'leads:create', category: 'LEADS', description: 'Create new leads' },
-  { name: 'leads:update', category: 'LEADS', description: 'Edit existing leads' },
-  { name: 'leads:delete', category: 'LEADS', description: 'Delete leads' },
+  // Properties
+  { name: 'properties:read', category: 'PROPERTIES', description: 'View property listings and details' },
+  { name: 'properties:create', category: 'PROPERTIES', description: 'Create new properties and drafts' },
+  { name: 'properties:update', category: 'PROPERTIES', description: 'Edit property details, media, and status' },
+  { name: 'properties:delete', category: 'PROPERTIES', description: 'Delete or archive property records' },
 
-  // Deals
-  { name: 'deals:read', category: 'DEALS', description: 'View deals and pipelines' },
-  { name: 'deals:create', category: 'DEALS', description: 'Create new deals' },
-  { name: 'deals:update', category: 'DEALS', description: 'Edit deals and move stages' },
-  { name: 'deals:delete', category: 'DEALS', description: 'Delete deals' },
+  // Clients
+  { name: 'clients:read', category: 'CLIENTS', description: 'View client directory and records' },
+  { name: 'clients:create', category: 'CLIENTS', description: 'Register new clients' },
+  { name: 'clients:update', category: 'CLIENTS', description: 'Edit client info, shortlists, and shares' },
+  { name: 'clients:delete', category: 'CLIENTS', description: 'Delete client records and attachments' },
+  { name: 'clients:documents:view_sensitive', category: 'CLIENTS', description: 'View and download confidential client documents (KYC, Aadhaar, Bank receipts)' },
 
-  // Users & Staff
-  { name: 'users:read', category: 'USERS', description: 'View staff members and profiles' },
-  { name: 'users:create', category: 'USERS', description: 'Invite and create new users' },
-  { name: 'users:update', category: 'USERS', description: 'Edit user accounts and statuses' },
-  { name: 'users:delete', category: 'USERS', description: 'Deactivate or delete users' },
+  // Brokers
+  { name: 'brokers:read', category: 'BROKERS', description: 'View broker directory' },
+  { name: 'brokers:create', category: 'BROKERS', description: 'Create new broker records' },
+  { name: 'brokers:update', category: 'BROKERS', description: 'Edit broker details and expertise' },
+  { name: 'brokers:delete', category: 'BROKERS', description: 'Delete broker records' },
 
-  // Roles & Permissions (RBAC)
+  // Owners
+  { name: 'owners:read', category: 'OWNERS', description: 'View property owner records' },
+  { name: 'owners:create', category: 'OWNERS', description: 'Create new property owner records' },
+  { name: 'owners:update', category: 'OWNERS', description: 'Edit owner details and assignments' },
+  { name: 'owners:delete', category: 'OWNERS', description: 'Delete owner records' },
+
+  // Finance
+  { name: 'finance:read', category: 'FINANCE', description: 'View financial reports, brokerage ledgers, and transactions' },
+  { name: 'finance:manage', category: 'FINANCE', description: 'Create and edit financial records and commissions' },
+
+  // Employees & Organization (RBAC)
+  { name: 'employees:read', category: 'ORGANIZATION', description: 'View staff members and access profiles' },
+  { name: 'employees:manage', category: 'ORGANIZATION', description: 'Create, update, deactivate staff, and configure module permissions' },
+
+  // Audit Logs
+  { name: 'audit:read', category: 'AUDIT', description: 'Inspect audit logs and employee activity tracking' },
+
+  // Roles & Permissions (Legacy / Low-level)
   { name: 'roles:read', category: 'ROLES', description: 'View roles and their assigned permissions' },
   { name: 'roles:create', category: 'ROLES', description: 'Create custom roles' },
   { name: 'roles:update', category: 'ROLES', description: 'Modify role permissions' },
@@ -33,10 +51,21 @@ export const SYSTEM_PERMISSIONS = [
   { name: 'settings:update', category: 'SETTINGS', description: 'Update CRM configurations and branding' },
 ]
 
+let systemDefaultsSeeded = false
+
 /**
- * Seeds default system permissions and the SUPER_ADMIN / AGENT roles if they don't exist
+ * Seeds default system permissions and pre-configured roles if they don't exist
  */
 export async function seedSystemDefaults(prisma: PrismaClient) {
+  if (systemDefaultsSeeded) return
+
+  // Fast check: If permissions already exist, skip running 100 serial database upserts
+  const count = await prisma.permission.count()
+  if (count >= SYSTEM_PERMISSIONS.length) {
+    systemDefaultsSeeded = true
+    return
+  }
+
   // 1. Seed all permissions (upsert to avoid duplicates)
   for (const perm of SYSTEM_PERMISSIONS) {
     await prisma.permission.upsert({
@@ -46,63 +75,83 @@ export async function seedSystemDefaults(prisma: PrismaClient) {
     })
   }
 
-  // 2. Ensure SUPER_ADMIN role exists with *:* permission
-  const superAdminRole = await prisma.role.upsert({
-    where: { name: 'SUPER_ADMIN' },
-    update: {},
-    create: {
-      name: 'SUPER_ADMIN',
-      description: 'Full unrestricted administrative access across the CRM',
-      isSystem: true,
-    },
-  })
-
-  const superAdminPerm = await prisma.permission.findUnique({ where: { name: '*:*' } })
-  if (superAdminPerm) {
-    await prisma.rolePermission.upsert({
-      where: {
-        roleId_permissionId: {
-          roleId: superAdminRole.id,
-          permissionId: superAdminPerm.id,
-        },
-      },
-      update: {},
+  // Helper to sync role with a list of permission names
+  async function ensureRole(roleName: string, description: string, permissionNames: string[], isSystem = false) {
+    const role = await prisma.role.upsert({
+      where: { name: roleName },
+      update: { description, isSystem },
       create: {
-        roleId: superAdminRole.id,
-        permissionId: superAdminPerm.id,
+        name: roleName,
+        description,
+        isSystem,
       },
     })
-  }
 
-  // 3. Ensure a default SALES_AGENT role exists with standard lead/deal access
-  const agentRole = await prisma.role.upsert({
-    where: { name: 'SALES_AGENT' },
-    update: {},
-    create: {
-      name: 'SALES_AGENT',
-      description: 'Standard sales representative with lead and deal management access',
-      isSystem: false,
-    },
-  })
+    const permissions = await prisma.permission.findMany({
+      where: { name: { in: permissionNames } },
+    })
 
-  const agentPermNames = ['leads:read', 'leads:create', 'leads:update', 'deals:read', 'deals:create', 'deals:update']
-  const agentPerms = await prisma.permission.findMany({
-    where: { name: { in: agentPermNames } },
-  })
-
-  for (const perm of agentPerms) {
-    await prisma.rolePermission.upsert({
-      where: {
-        roleId_permissionId: {
-          roleId: agentRole.id,
+    for (const perm of permissions) {
+      await prisma.rolePermission.upsert({
+        where: {
+          roleId_permissionId: {
+            roleId: role.id,
+            permissionId: perm.id,
+          },
+        },
+        update: {},
+        create: {
+          roleId: role.id,
           permissionId: perm.id,
         },
-      },
-      update: {},
-      create: {
-        roleId: agentRole.id,
-        permissionId: perm.id,
-      },
-    })
+      })
+    }
+
+    return role
   }
+
+  // 2. Ensure SUPER_ADMIN role exists with *:* permission
+  await ensureRole('SUPER_ADMIN', 'Full unrestricted administrative access across the CRM', ['*:*'], true)
+
+  // 3. Ensure SALES_AGENT role exists
+  await ensureRole(
+    'SALES_AGENT',
+    'Standard sales representative with property and client management access',
+    [
+      'properties:read',
+      'properties:create',
+      'properties:update',
+      'clients:read',
+      'clients:create',
+      'clients:update',
+      'brokers:read',
+      'owners:read',
+    ],
+    true
+  )
+
+  // 4. Ensure TELECALLER role exists (No finance, no sensitive docs, view-only on brokers/owners)
+  await ensureRole(
+    'TELECALLER',
+    'Telecalling representative with limited view access and client management',
+    [
+      'properties:read',
+      'brokers:read',
+      'owners:read',
+      'clients:read',
+      'clients:create',
+      'clients:update',
+    ],
+    true
+  )
+
+  // 5. Ensure VIEW_ONLY role exists
+  await ensureRole(
+    'VIEW_ONLY',
+    'Read-only access to properties, clients, brokers, and owners',
+    ['properties:read', 'clients:read', 'brokers:read', 'owners:read'],
+    true
+  )
+
+  systemDefaultsSeeded = true
 }

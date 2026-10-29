@@ -1281,6 +1281,107 @@ export async function deletePropertyController(c: Context<AppEnv>) {
 }
 
 // ==========================================
+// SOCIETY PROFILES (Quick Pre-fill & Templates)
+// ==========================================
+
+/**
+ * List Distinct Society / Building Profiles for Quick Pre-fill and Auto-complete
+ */
+export async function listDistinctSocietiesController(c: Context<AppEnv>) {
+  const prisma = c.get('prisma')
+  const q = c.req.query('q')?.trim()
+
+  try {
+    const where: Prisma.PropertyWhereInput = {
+      isDraft: false,
+      societyBuildingName: {
+        not: '',
+      },
+    }
+
+    if (q) {
+      where.OR = [
+        { societyBuildingName: { contains: q, mode: 'insensitive' } },
+        { locationArea: { contains: q, mode: 'insensitive' } },
+        { builderName: { contains: q, mode: 'insensitive' } },
+        { city: { contains: q, mode: 'insensitive' } },
+      ]
+    }
+
+    const grouped = await prisma.property.groupBy({
+      by: ['societyBuildingName'],
+      _count: { id: true },
+      where,
+      orderBy: {
+        _count: {
+          id: 'desc',
+        },
+      },
+      take: 50,
+    })
+
+    if (!grouped.length) {
+      return c.json({
+        success: true,
+        societies: [],
+      })
+    }
+
+    const societyNames = grouped.map((g) => g.societyBuildingName)
+    const countMap = new Map<string, number>()
+    for (const g of grouped) {
+      countMap.set(g.societyBuildingName, g._count.id)
+    }
+
+    const properties = await prisma.property.findMany({
+      where: {
+        societyBuildingName: { in: societyNames },
+        isDraft: false,
+      },
+      distinct: ['societyBuildingName'],
+      orderBy: {
+        updatedAt: 'desc',
+      },
+      select: {
+        societyBuildingName: true,
+        locationArea: true,
+        pincode: true,
+        city: true,
+        builderName: true,
+        yearOfConstruction: true,
+        totalFloors: true,
+        totalUnits: true,
+        reraNumber: true,
+        amenities: true,
+      },
+    })
+
+    const societies = properties.map((p) => ({
+      ...p,
+      propertyCount: countMap.get(p.societyBuildingName) || 1,
+    }))
+
+    // Sort by propertyCount descending
+    societies.sort((a, b) => b.propertyCount - a.propertyCount)
+
+    return c.json({
+      success: true,
+      societies,
+    })
+  } catch (error: any) {
+    console.error('Failed to list society profiles:', error)
+    return c.json(
+      {
+        success: false,
+        error: error.message || 'Failed to list society profiles',
+        code: 'SOCIETY_PROFILES_ERROR',
+      },
+      500
+    )
+  }
+}
+
+// ==========================================
 // FILTER PRESETS CONTROLLERS (FR-SF-09)
 // ==========================================
 

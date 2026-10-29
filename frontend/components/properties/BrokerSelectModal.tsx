@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { Search, X, Handshake, MapPin, Phone, Check, Loader2 } from 'lucide-react'
-import { getApiErrorMessage } from '../../utils/errorHandler'
+import { getApiErrorMessage, isPermissionOrAccessError } from '../../utils/errorHandler'
 import { getBrokersList } from '../../api/brokers'
 import type { Broker } from '../../types/broker'
 
@@ -92,7 +92,20 @@ export function BrokerSelectModal({
 
         {/* Broker List */}
         <div className="overflow-y-auto flex-1 divide-y divide-border">
-          {error && !loading ? <p role="alert" className="p-5 text-xs text-red-500">{error} <button type="button" className="underline" onClick={() => setAttempt(attempt + 1)}>Retry</button></p> : loading ? (
+          {error && !loading ? (
+            <div role="alert" className="p-5 text-center text-xs text-red-400">
+              <p className="leading-relaxed">{error}</p>
+              {!isPermissionOrAccessError(error) && (
+                <button
+                  type="button"
+                  className="mt-2.5 px-3 py-1 text-[10px] uppercase font-bold border border-border bg-surface-secondary text-foreground hover:bg-surface transition-colors cursor-pointer"
+                  onClick={() => setAttempt(attempt + 1)}
+                >
+                  Retry Connection
+                </button>
+              )}
+            </div>
+          ) : loading ? (
             <div className="py-12 flex flex-col items-center justify-center text-muted-text">
               <Loader2 className="w-5 h-5 animate-spin text-gold mb-2" />
               <span className="text-[10px] font-bold uppercase tracking-wider">
