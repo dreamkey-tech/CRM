@@ -78,6 +78,7 @@ export interface Property {
   isArchived: boolean
   archivedAt?: string | null
   showInWebsite?: boolean
+  isBestProperty?: boolean
   propertyType: PropertyType
   societyBuildingName: string
   locationArea: string
@@ -128,6 +129,8 @@ export interface PropertyStats {
   dealDoneCount: number
   directCount: number
   brokerCount: number
+  websiteVisibleCount?: number
+  bestPropertiesCount?: number
 }
 
 export type PropertyQueryParams = PropertyFilterParams
@@ -156,6 +159,7 @@ export interface PropertyFilterParams {
   isDraft?: 'true' | 'false' | 'all'
   isArchived?: 'true' | 'false' | 'all'
   showInWebsite?: 'true' | 'false' | 'all'
+  isBestProperty?: 'true' | 'false' | 'all'
   sortBy?: 'createdAt' | 'updatedAt' | 'askingPrice' | 'carpetAreaSqFt' | 'societyBuildingName'
   sortOrder?: 'asc' | 'desc'
 }

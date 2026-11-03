@@ -207,6 +207,103 @@ export async function listWebsitePropertiesController(c: Context<AppEnv>) {
 }
 
 /**
+ * Public Best Properties API
+ * Endpoint: GET /best-properties (also GET /v1/website/properties/best-properties)
+ * Public endpoint - no authentication required.
+ * Returns public property listings where `isBestProperty` is true and `showInWebsite` is true,
+ * excluding drafts, archived listings, and sensitive internal CRM fields.
+ * Format is identical to the public listing endpoint (/website/properties/list).
+ */
+export async function listBestPropertiesController(c: Context<AppEnv>) {
+  const prisma = c.get('prisma')
+
+  try {
+    const properties = await prisma.property.findMany({
+      where: {
+        isBestProperty: true,
+        showInWebsite: true,
+        isDraft: false,
+        isArchived: false,
+      },
+      take: 3,
+      orderBy: { updatedAt: 'desc' },
+      select: {
+        id: true,
+        propertyType: true,
+        societyBuildingName: true,
+        locationArea: true,
+        city: true,
+        carpetAreaSqFt: true,
+        superBuiltUpAreaSqFt: true,
+        askingPrice: true,
+        pricingType: true,
+        bedrooms: true,
+        bathrooms: true,
+        amenities: true,
+        availabilityStatus: true,
+        createdAt: true,
+        media: {
+          where: {
+            category: 'PHOTOGRAPH',
+          },
+          orderBy: [
+            { isCover: 'desc' },
+            { order: 'asc' },
+          ],
+          take: 3,
+          select: {
+            id: true,
+            url: true,
+            thumbnailUrl: true,
+            isCover: true,
+            title: true,
+          },
+        },
+      },
+    })
+
+    const formattedProperties = properties.map((p) => {
+      const cover = p.media.find((m) => m.isCover) || p.media[0] || null
+
+      return {
+        id: p.id,
+        propertyType: p.propertyType,
+        societyBuildingName: p.societyBuildingName,
+        locationArea: p.locationArea,
+        city: p.city,
+        carpetAreaSqFt: p.carpetAreaSqFt,
+        superBuiltUpAreaSqFt: p.superBuiltUpAreaSqFt,
+        askingPrice: p.askingPrice,
+        pricingType: p.pricingType,
+        bedrooms: p.bedrooms,
+        bathrooms: p.bathrooms,
+        amenities: p.amenities,
+        availabilityStatus: p.availabilityStatus,
+        coverImage: cover ? cover.url : null,
+        previewImages: p.media.map((m) => m.url),
+        isBestProperty: true,
+      }
+    })
+
+    return c.json({
+      success: true,
+      properties: formattedProperties,
+      total: formattedProperties.length,
+    })
+  } catch (error: any) {
+    console.error('Failed to list best properties:', error)
+    return c.json(
+      {
+        success: false,
+        error: error.message || 'Failed to list best properties',
+        code: 'BEST_PROPERTIES_LIST_ERROR',
+      },
+      500
+    )
+  }
+}
+
+/**
  * 2. Record Website User Property Click / Interest
  * Endpoint: POST /v1/website/properties/:id/click (and /v1/website/properties/list/:id/click)
  * Guarded by `websiteAuthMiddleware`

@@ -9,6 +9,7 @@ import {
 } from '../zod/website-property'
 import {
   listWebsitePropertiesController,
+  listBestPropertiesController,
   trackWebsitePropertyClickController,
   getWebsitePropertyDetailController,
 } from '../controllers/website-property.controller'
@@ -41,6 +42,12 @@ websitePropertyRoutes.get(
   '/',
   zValidator('query', websitePropertyListQuerySchema, zodValidationHook),
   listWebsitePropertiesController
+)
+
+// 1.1 Public Best Properties (Showcase, max 3 properties, unauthenticated)
+websitePropertyRoutes.get(
+  '/best-properties',
+  listBestPropertiesController
 )
 
 // 2. Track User Property Click (Authenticated via Website Cookies / Token)

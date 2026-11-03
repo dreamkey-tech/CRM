@@ -36,8 +36,16 @@ export const openApiSpec = {
   },
   servers: [
     {
+      url: 'https://backend.dreamkey-crm.workers.dev',
+      description: 'Production Cloudflare Worker',
+    },
+    {
       url: 'http://localhost:8787',
       description: 'Local Development Server',
+    },
+    {
+      url: '/',
+      description: 'Current Origin',
     },
   ],
   tags: [
@@ -1546,6 +1554,49 @@ export const openApiSpec = {
         },
       },
     },
+    '/v1/properties/{id}/website-settings': {
+      patch: {
+        tags: ['Properties'],
+        summary: 'Update Website Visibility & Best Property Showcase',
+        description: 'Updates showInWebsite and/or isBestProperty for a property. Automatically sets showInWebsite=true when isBestProperty is enabled, auto-resets isBestProperty=false if unpublished, and enforces a strict maximum quota of 3 best properties.',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' } }],
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  showInWebsite: { type: 'boolean', description: 'Whether the property is visible on the public website listing.' },
+                  isBestProperty: { type: 'boolean', description: 'Whether the property is featured in Best Properties (max 3).' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Website settings updated successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    property: { type: 'object' },
+                    bestPropertiesCount: { type: 'integer', example: 1 },
+                  },
+                },
+              },
+            },
+          },
+          '400': { description: 'Validation failed or quota exceeded (BEST_PROPERTIES_LIMIT_EXCEEDED).' },
+          '401': { description: 'Authentication required.' },
+          '403': { description: 'Permission properties:update required.' },
+          '404': { description: 'Property not found.' },
+        },
+      },
+    },
     '/v1/properties/{id}/media': {
       post: {
         tags: ['Property Media & R2 Storage'],
@@ -1675,6 +1726,54 @@ export const openApiSpec = {
         responses: {
           '200': { description: 'Filter preset deleted.' },
           '404': { description: 'Preset not found.' },
+        },
+      },
+    },
+    '/best-properties': {
+      get: {
+        tags: ['Website Properties'],
+        summary: 'Public Best Properties Showcase',
+        description: 'Returns up to 3 featured "Best Properties" where isBestProperty is true and showInWebsite is true. Excludes drafts, archived listings, and sensitive CRM fields. Format is identical to the public listing endpoint.',
+        responses: {
+          '200': {
+            description: 'List of up to 3 best properties.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    properties: { type: 'array', items: { type: 'object' } },
+                    total: { type: 'integer', example: 3 },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/v1/best-properties': {
+      get: {
+        tags: ['Website Properties'],
+        summary: 'Public Best Properties Showcase (v1 alias)',
+        description: 'Returns up to 3 featured "Best Properties" where isBestProperty is true and showInWebsite is true. Excludes drafts, archived listings, and sensitive CRM fields.',
+        responses: {
+          '200': {
+            description: 'List of up to 3 best properties.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    properties: { type: 'array', items: { type: 'object' } },
+                    total: { type: 'integer', example: 3 },
+                  },
+                },
+              },
+            },
+          },
         },
       },
     },

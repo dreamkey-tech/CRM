@@ -11,6 +11,7 @@ import {
   createPropertyDraftSchema,
   updatePropertySchema,
   updatePropertyStatusSchema,
+  updatePropertyWebsiteSettingsSchema,
   reorderPropertyMediaSchema,
   propertyFilterQuerySchema,
 } from '../zod/property'
@@ -24,6 +25,7 @@ import {
   getPropertyByIdController,
   updatePropertyController,
   updatePropertyStatusController,
+  updatePropertyWebsiteSettingsController,
   attachPropertyMediaController,
   deletePropertyMediaController,
   reorderPropertyMediaController,
@@ -141,6 +143,18 @@ propertyRoutes.patch(
   requirePermission('properties:update'),
   zValidator('json', updatePropertyStatusSchema, zodValidationHook),
   updatePropertyStatusController
+)
+
+/**
+ * 9.1 PATCH /v1/properties/:id/website-settings
+ * Quick update for public website visibility and best property showcase
+ */
+propertyRoutes.patch(
+  '/:id/website-settings',
+  requirePermission('properties:update'),
+  zValidator('param', directoryIdSchema, zodValidationHook),
+  zValidator('json', updatePropertyWebsiteSettingsSchema, zodValidationHook),
+  updatePropertyWebsiteSettingsController
 )
 
 /**

@@ -454,6 +454,7 @@ model Property {
   isDraft              Boolean               @default(false)
   isArchived           Boolean               @default(false)
   showInWebsite        Boolean               @default(false)
+  isBestProperty       Boolean               @default(false)
   archivedAt           DateTime?
 
   // Mandatory listing fields
@@ -512,6 +513,7 @@ model Property {
   @@index([isDraft])
   @@index([isArchived])
   @@index([showInWebsite])
+  @@index([isBestProperty])
   @@map("properties")
 }
 

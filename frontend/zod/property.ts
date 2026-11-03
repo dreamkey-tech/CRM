@@ -130,6 +130,7 @@ const basePropertyFormSchema = z
     amenities: z.array(z.string()),
     reraNumber: z.string().trim().max(80).optional(),
     showInWebsite: z.boolean().default(false),
+    isBestProperty: z.boolean().default(false),
     notes: z.string().trim().max(2000, 'Notes cannot exceed 2000 characters.').optional(),
   })
   .refine(

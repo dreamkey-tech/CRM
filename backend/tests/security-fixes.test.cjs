@@ -7,6 +7,7 @@ test('CORS origin validator strictly allows trusted origins and rejects attacker
     'www.dreamkeykol.com',
     'admin.dreamkeykol.com',
     'dreamkey-crm.pages.dev',
+    'backend.dreamkey-crm.workers.dev',
   ]
 
   function validateOrigin(origin, env = {}) {
@@ -26,7 +27,11 @@ test('CORS origin validator strictly allows trusted origins and rejects attacker
         } catch {}
       }
 
-      if (allowedHosts.includes(hostname) || hostname.endsWith('.dreamkey-crm.pages.dev')) {
+      if (
+        allowedHosts.includes(hostname) ||
+        hostname.endsWith('.dreamkey-crm.pages.dev') ||
+        hostname.endsWith('.dreamkey-crm.workers.dev')
+      ) {
         return origin
       }
     } catch {}
@@ -38,11 +43,14 @@ test('CORS origin validator strictly allows trusted origins and rejects attacker
   assert.equal(validateOrigin('https://dreamkeykol.com'), 'https://dreamkeykol.com')
   assert.equal(validateOrigin('https://admin.dreamkeykol.com'), 'https://admin.dreamkeykol.com')
   assert.equal(validateOrigin('https://preview-123.dreamkey-crm.pages.dev'), 'https://preview-123.dreamkey-crm.pages.dev')
+  assert.equal(validateOrigin('https://backend.dreamkey-crm.workers.dev'), 'https://backend.dreamkey-crm.workers.dev')
+  assert.equal(validateOrigin('https://preview.dreamkey-crm.workers.dev'), 'https://preview.dreamkey-crm.workers.dev')
 
   // Malicious / untrusted origins must be rejected (return null)
   assert.equal(validateOrigin('https://evil.com'), null)
   assert.equal(validateOrigin('https://attacker-localhost.com'), null)
   assert.equal(validateOrigin('https://dreamkeykol.com.attacker.com'), null)
+  assert.equal(validateOrigin('https://attacker-dreamkey-crm.workers.dev.evil.com'), null)
   assert.equal(validateOrigin('javascript:alert(1)'), null)
 })
 
@@ -170,4 +178,60 @@ test('Non-Super Admin cannot reset password or modify a Super Admin account', ()
   assert.equal(canModifyTargetUser(['employees:manage'], ['SUPER_ADMIN']), false)
   assert.equal(canModifyTargetUser(['employees:manage'], ['SALES_AGENT']), true)
   assert.equal(canModifyTargetUser(['*:*'], ['SUPER_ADMIN']), true)
+})
+
+test('OpenAPI spec dynamically configures environment server origin and avoids localhost in prod', () => {
+  function resolveOpenApiServers(reqUrlStr, headers = {}) {
+    let currentOrigin = ''
+    try {
+      const reqUrl = new URL(reqUrlStr)
+      const forwardedProto = headers['x-forwarded-proto'] || reqUrl.protocol.replace(':', '')
+      const forwardedHost = headers['x-forwarded-host'] || headers['host'] || reqUrl.host
+      if (forwardedHost) {
+        currentOrigin = `${forwardedProto}://${forwardedHost}`
+      }
+    } catch {}
+
+    const candidateServers = [
+      ...(currentOrigin
+        ? [
+            {
+              url: currentOrigin,
+              description: 'Current Environment (Auto-detected)',
+            },
+          ]
+        : []),
+      {
+        url: 'https://backend.dreamkey-crm.workers.dev',
+        description: 'Production Cloudflare Worker',
+      },
+      {
+        url: 'http://localhost:8787',
+        description: 'Local Development Server',
+      },
+    ]
+
+    const seen = new Set()
+    return candidateServers.filter((s) => {
+      if (seen.has(s.url)) return false
+      seen.add(s.url)
+      return true
+    })
+  }
+
+  // Prod Cloudflare request
+  const prodServers = resolveOpenApiServers('https://backend.dreamkey-crm.workers.dev/openapi.json')
+  assert.equal(prodServers[0].url, 'https://backend.dreamkey-crm.workers.dev')
+
+  // Reverse proxy with forwarded host
+  const proxyServers = resolveOpenApiServers('http://internal-worker/openapi.json', {
+    'x-forwarded-proto': 'https',
+    'x-forwarded-host': 'api.dreamkeykol.com',
+  })
+  assert.equal(proxyServers[0].url, 'https://api.dreamkeykol.com')
+
+  // Local dev
+  const localServers = resolveOpenApiServers('http://localhost:8787/openapi.json')
+  assert.equal(localServers[0].url, 'http://localhost:8787')
+  assert.equal(localServers[1].url, 'https://backend.dreamkey-crm.workers.dev')
 })

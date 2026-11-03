@@ -15,6 +15,7 @@ import type {
 export interface GetPropertiesResponse {
   success: boolean
   properties: Property[]
+  bestPropertiesCount?: number
   pagination: PropertyPagination
 }
 
@@ -132,6 +133,36 @@ export async function updatePropertyStatus(
     return res.data.property
   } catch (error) {
     throw handleApiError(error, 'update property status')
+  }
+}
+
+export interface UpdatePropertyWebsiteSettingsPayload {
+  showInWebsite?: boolean
+  isBestProperty?: boolean
+}
+
+export interface UpdatePropertyWebsiteSettingsResponse {
+  success: boolean
+  message: string
+  property: Property
+  bestPropertiesCount?: number
+}
+
+/**
+ * 6.1 Quick Website Listing & Best Property Settings Update
+ */
+export async function updatePropertyWebsiteSettings(
+  id: string,
+  settings: UpdatePropertyWebsiteSettingsPayload
+): Promise<UpdatePropertyWebsiteSettingsResponse> {
+  try {
+    const res = await propertyApiClient.patch<UpdatePropertyWebsiteSettingsResponse>(
+      `/${id}/website-settings`,
+      settings
+    )
+    return res.data
+  } catch (error) {
+    throw handleApiError(error, 'update website visibility settings')
   }
 }
 

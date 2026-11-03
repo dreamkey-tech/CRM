@@ -20,6 +20,7 @@ import { AppError, formatSystemError } from './lib/errors'
 
 import { createWebsiteEnquirySchema } from './zod/website-enquiry'
 import { createWebsiteEnquiryController } from './controllers/website-enquiry.controller'
+import { listBestPropertiesController } from './controllers/website-property.controller'
 import { zValidator } from '@hono/zod-validator'
 import { zodValidationHook } from './lib/validator'
 
@@ -50,6 +51,14 @@ app.use(
           return origin
         }
 
+        // Allow self-origin / current backend host (e.g. Swagger UI or same-domain API queries)
+        try {
+          const reqHost = new URL(c.req.url).hostname.toLowerCase()
+          if (hostname === reqHost) {
+            return origin
+          }
+        } catch {}
+
         // Allow explicitly configured FRONTEND_URL
         if (c.env?.FRONTEND_URL) {
           try {
@@ -58,14 +67,19 @@ app.use(
           } catch {}
         }
 
-        // Allow official DreamKey domains and Cloudflare Pages deployments
+        // Allow official DreamKey domains, Workers domains, and Cloudflare Pages deployments
         const allowedHosts = [
           'dreamkeykol.com',
           'www.dreamkeykol.com',
           'admin.dreamkeykol.com',
           'dreamkey-crm.pages.dev',
+          'backend.dreamkey-crm.workers.dev',
         ]
-        if (allowedHosts.includes(hostname) || hostname.endsWith('.dreamkey-crm.pages.dev')) {
+        if (
+          allowedHosts.includes(hostname) ||
+          hostname.endsWith('.dreamkey-crm.pages.dev') ||
+          hostname.endsWith('.dreamkey-crm.workers.dev')
+        ) {
           return origin
         }
       } catch {}
@@ -75,7 +89,7 @@ app.use(
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization', 'Cookie'],
+    allowHeaders: ['Content-Type', 'Authorization', 'Cookie', 'Accept', 'X-Requested-With'],
   })
 )
 
@@ -89,9 +103,60 @@ app.post(
   createWebsiteEnquiryController
 )
 
+// 3.1 Public Best Properties Showcase Endpoints (Unauthenticated)
+app.get('/best-properties', listBestPropertiesController)
+app.get('/v1/best-properties', listBestPropertiesController)
+
 // 4. Swagger UI Documentation
-app.get('/openapi.json', (c) => c.json(openApiSpec))
-app.get('/docs', swaggerUI({ url: '/openapi.json' }))
+app.get('/openapi.json', (c) => {
+  let currentOrigin = ''
+  try {
+    const reqUrl = new URL(c.req.url)
+    const forwardedProto = c.req.header('x-forwarded-proto') || reqUrl.protocol.replace(':', '')
+    const forwardedHost = c.req.header('x-forwarded-host') || c.req.header('host') || reqUrl.host
+    if (forwardedHost) {
+      currentOrigin = `${forwardedProto}://${forwardedHost}`
+    }
+  } catch {}
+
+  const candidateServers = [
+    ...(currentOrigin
+      ? [
+          {
+            url: currentOrigin,
+            description: 'Current Environment (Auto-detected)',
+          },
+        ]
+      : []),
+    {
+      url: 'https://backend.dreamkey-crm.workers.dev',
+      description: 'Production Cloudflare Worker',
+    },
+    {
+      url: 'http://localhost:8787',
+      description: 'Local Development Server',
+    },
+  ]
+
+  const seen = new Set<string>()
+  const servers = candidateServers.filter((s) => {
+    if (seen.has(s.url)) return false
+    seen.add(s.url)
+    return true
+  })
+
+  return c.json({
+    ...openApiSpec,
+    servers,
+  })
+})
+app.get(
+  '/docs',
+  swaggerUI({
+    url: '/openapi.json',
+    persistAuthorization: true,
+  })
+)
 
 // 5. Mount API routes (/v1/auth/..., /v1/admin/..., /v1/user/..., /v1/brokers, /v1/properties, /api/auth/...)
 app.route('/v1/auth', authRoutes)

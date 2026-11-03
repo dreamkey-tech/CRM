@@ -25,6 +25,9 @@ import {
   Loader2,
   CheckCircle2,
   Plus,
+  Globe,
+  Star,
+  MoreVertical,
 } from 'lucide-react'
 import { useRouter } from '../../context/NavigationLoaderContext'
 import { useAuthStore } from '../../store/useAuthStore'
@@ -43,6 +46,7 @@ interface PropertyDetailModalProps {
   onDelete: (property: Property) => void
   onStatusChanged: () => void
   onAddUnitInSociety?: (property: Property) => void
+  onOpenWebsiteModal?: (property: Property) => void
 }
 
 export function PropertyDetailModal({
@@ -53,6 +57,7 @@ export function PropertyDetailModal({
   onDelete,
   onStatusChanged,
   onAddUnitInSociety,
+  onOpenWebsiteModal,
 }: PropertyDetailModalProps) {
   const router = useRouter()
   const { hasPermission } = useAuthStore()
@@ -139,11 +144,21 @@ export function PropertyDetailModal({
           <div className="flex items-center gap-2 min-w-0">
             <Building2 className="w-4 h-4 text-gold shrink-0" />
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-xs sm:text-sm font-bold uppercase tracking-wider text-foreground truncate">
                   {property.societyBuildingName}
                 </h3>
                 <PropertyStatusBadge status={property.availabilityStatus} />
+                {property.isBestProperty && (
+                  <span className="px-1.5 py-0.5 bg-gold/15 text-gold border border-gold/40 text-[9px] font-mono font-black uppercase flex items-center gap-1">
+                    <Star className="w-2.5 h-2.5 fill-gold text-gold" /> Best Property
+                  </span>
+                )}
+                {property.showInWebsite && !property.isBestProperty && (
+                  <span className="px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 text-[9px] font-mono font-bold uppercase flex items-center gap-1">
+                    <Globe className="w-2.5 h-2.5" /> Web Listed
+                  </span>
+                )}
               </div>
               <p className="text-[10px] text-muted-text truncate">
                 {property.locationArea}, {property.city} — PIN {property.pincode}
@@ -175,6 +190,20 @@ export function PropertyDetailModal({
             >
               <Edit2 className="w-3 h-3 text-gold" /> Edit
             </button>
+
+            {onOpenWebsiteModal && hasPermission('properties:update') && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose()
+                  onOpenWebsiteModal(property)
+                }}
+                className="px-2.5 py-1 text-[9px] font-bold uppercase tracking-wider bg-surface border border-border text-foreground hover:border-gold/60 hover:text-gold transition-colors flex items-center gap-1 cursor-pointer"
+                title="Website & Best Properties Settings"
+              >
+                <Globe className="w-3 h-3 text-gold" /> Showcase
+              </button>
+            )}
 
             {/* Maximize / Minimize Toggle */}
             <button

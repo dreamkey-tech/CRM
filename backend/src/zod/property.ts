@@ -123,6 +123,7 @@ export const generateUploadUrlsSchema = z.object({
 export const createPropertyBaseSchema = z.object({
   isDraft: z.boolean().default(false),
   showInWebsite: z.boolean().default(false),
+  isBestProperty: z.boolean().default(false),
 
   // Mandatory Listing Fields
   propertyType: propertyTypeSchema.default('FLAT'),
@@ -219,6 +220,7 @@ export const createPropertyDraftSchema = z.object({
   brokerId: z.string().uuid().optional().nullable(),
   ownerId: z.string().uuid().optional().nullable(),
   showInWebsite: z.boolean().optional().default(false),
+  isBestProperty: z.boolean().optional().default(false),
   notes: z.string().max(2000).optional().nullable(),
   media: z.array(propertyMediaItemSchema).optional().default([]),
 }).superRefine((data, ctx) => {
@@ -238,6 +240,7 @@ export const attachPropertyMediaSchema = z.object({
 export const updatePropertySchema = createPropertyBaseSchema.extend({
   isDraft: createPropertyBaseSchema.shape.isDraft.removeDefault(),
   showInWebsite: createPropertyBaseSchema.shape.showInWebsite.removeDefault(),
+  isBestProperty: createPropertyBaseSchema.shape.isBestProperty.removeDefault(),
   propertyType: createPropertyBaseSchema.shape.propertyType.removeDefault(),
   city: createPropertyBaseSchema.shape.city.removeDefault(),
   pricingType: createPropertyBaseSchema.shape.pricingType.removeDefault(),
@@ -353,6 +356,15 @@ export const propertyFilterQuerySchema = z.object({
       return undefined
     }),
 
+  isBestProperty: z
+    .enum(['true', 'false', 'all'])
+    .optional()
+    .transform((val) => {
+      if (val === 'true') return true
+      if (val === 'false') return false
+      return undefined
+    }),
+
   // Sorting
   sortBy: z
     .enum(['createdAt', 'updatedAt', 'askingPrice', 'carpetAreaSqFt', 'societyBuildingName'])
@@ -371,6 +383,15 @@ export const createFilterPresetSchema = z.object({
 })
 
 export const updateFilterPresetSchema = createFilterPresetSchema.partial()
+
+export const updatePropertyWebsiteSettingsSchema = z
+  .object({
+    showInWebsite: z.boolean().optional(),
+    isBestProperty: z.boolean().optional(),
+  })
+  .refine((data) => data.showInWebsite !== undefined || data.isBestProperty !== undefined, {
+    message: 'At least one of showInWebsite or isBestProperty must be provided.',
+  })
 
 // ==========================================
 // INFERRED TYPES
@@ -392,5 +413,6 @@ export type UpdatePropertyStatusInput = z.infer<typeof updatePropertyStatusSchem
 export type ReorderPropertyMediaInput = z.infer<typeof reorderPropertyMediaSchema>
 export type PropertyFilterQuery = z.infer<typeof propertyFilterQuerySchema>
 export type CreateFilterPresetInput = z.infer<typeof createFilterPresetSchema>
+export type UpdatePropertyWebsiteSettingsInput = z.infer<typeof updatePropertyWebsiteSettingsSchema>
 export type UpdateFilterPresetInput = z.infer<typeof updateFilterPresetSchema>
 

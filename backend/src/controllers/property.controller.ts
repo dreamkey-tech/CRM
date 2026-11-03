@@ -6,6 +6,7 @@ import {
   CreatePropertyDraftInput,
   UpdatePropertyInput,
   UpdatePropertyStatusInput,
+  UpdatePropertyWebsiteSettingsInput,
   ReorderPropertyMediaInput,
   PropertyFilterQuery,
   createPropertySchema,
@@ -166,6 +167,7 @@ export async function createPropertyDraftController(c: Context<AppEnv>) {
         brokerId: body.accessType === 'BROKER' ? body.brokerId || null : null,
         ownerId: body.accessType !== 'BROKER' ? body.ownerId || null : null,
         showInWebsite: body.showInWebsite ?? false,
+        isBestProperty: body.isBestProperty ?? false,
         notes: body.notes || null,
       },
     })
@@ -264,6 +266,23 @@ export async function createPropertyController(c: Context<AppEnv>) {
       }
     }
 
+    if (body.isBestProperty === true) {
+      const currentBestCount = await prisma.property.count({
+        where: { isBestProperty: true, isArchived: false },
+      })
+      if (currentBestCount >= 3) {
+        return c.json(
+          {
+            success: false,
+            error: 'Maximum 3 properties can be marked as Best Properties. Please unmark another property first.',
+            code: 'BEST_PROPERTIES_LIMIT_EXCEEDED',
+            currentBestCount,
+          },
+          400
+        )
+      }
+    }
+
     const newProperty = await prisma.property.create({
       data: {
         isDraft: body.isDraft ?? false,
@@ -288,8 +307,9 @@ export async function createPropertyController(c: Context<AppEnv>) {
           : null,
         accessType: body.accessType,
         brokerId: body.accessType === 'BROKER' ? body.brokerId ?? null : null,
-        ownerId: body.accessType !== 'BROKER' ? body.ownerId ?? null : null,
-        showInWebsite: body.showInWebsite ?? false,
+        ownerId: body.accessType !== 'DIRECT' ? null : body.ownerId ?? null,
+        showInWebsite: body.isBestProperty ? true : (body.showInWebsite ?? false),
+        isBestProperty: body.isBestProperty ?? false,
         builderName: body.builderName ?? null,
         yearOfConstruction: body.yearOfConstruction ?? null,
         totalUnits: body.totalUnits ?? null,
@@ -393,6 +413,7 @@ export async function listPropertiesController(c: Context<AppEnv>) {
     isDraft,
     isArchived,
     showInWebsite,
+    isBestProperty,
     sortBy = 'createdAt',
     sortOrder = 'desc',
   } = query
@@ -410,6 +431,9 @@ export async function listPropertiesController(c: Context<AppEnv>) {
   }
   if (showInWebsite !== undefined) {
     whereConditions.push({ showInWebsite })
+  }
+  if (isBestProperty !== undefined) {
+    whereConditions.push({ isBestProperty })
   }
 
   // FR-SF-01: Filter by Property Type (supports comma-separated list e.g. "FLAT,COMMERCIAL,OTHER")
@@ -590,7 +614,7 @@ export async function listPropertiesController(c: Context<AppEnv>) {
     whereConditions.length > 0 ? { AND: whereConditions } : {}
 
   try {
-    const [total, properties] = await Promise.all([
+    const [total, properties, bestPropertiesCount] = await Promise.all([
       prisma.property.count({ where }),
       prisma.property.findMany({
         where,
@@ -610,11 +634,15 @@ export async function listPropertiesController(c: Context<AppEnv>) {
           },
         },
       }),
+      prisma.property.count({
+        where: { isBestProperty: true, isArchived: false, isDraft: false },
+      }),
     ])
 
     return c.json({
       success: true,
       properties,
+      bestPropertiesCount,
       pagination: {
         page,
         limit,
@@ -764,6 +792,33 @@ export async function updatePropertyController(c: Context<AppEnv>) {
       if (!validation.success) return c.json({ success: false, error: validation.error.issues[0]?.message || 'Complete the required property details.', details: validation.error.issues.map((issue) => ({ field: issue.path.join('.'), message: issue.message })), code: 'VALIDATION_ERROR' }, 400)
     }
 
+    if (body.isBestProperty === true && !existing.isBestProperty) {
+      const currentBestCount = await prisma.property.count({
+        where: { isBestProperty: true, isArchived: false, id: { not: id } },
+      })
+      if (currentBestCount >= 3) {
+        return c.json(
+          {
+            success: false,
+            error: 'Maximum 3 properties can be marked as Best Properties. Please unmark another property first.',
+            code: 'BEST_PROPERTIES_LIMIT_EXCEEDED',
+            currentBestCount,
+          },
+          400
+        )
+      }
+    }
+
+    let nextShowInWebsite = body.showInWebsite !== undefined ? body.showInWebsite : existing.showInWebsite
+    let nextIsBestProperty = body.isBestProperty !== undefined ? body.isBestProperty : existing.isBestProperty
+
+    if (body.isBestProperty === true) {
+      nextShowInWebsite = true
+    }
+    if (body.showInWebsite === false) {
+      nextIsBestProperty = false
+    }
+
     const updated = await prisma.property.update({
       where: { id },
       data: {
@@ -804,7 +859,8 @@ export async function updatePropertyController(c: Context<AppEnv>) {
               : null
             : existing.availabilityDate,
         accessType: body.accessType ?? existing.accessType,
-        showInWebsite: body.showInWebsite !== undefined ? body.showInWebsite : existing.showInWebsite,
+        showInWebsite: nextShowInWebsite,
+        isBestProperty: nextIsBestProperty,
         brokerId: (body.accessType ?? existing.accessType) === 'BROKER'
           ? body.brokerId !== undefined ? body.brokerId : existing.brokerId : null,
         ownerId: (body.accessType ?? existing.accessType) === 'DIRECT'
@@ -932,6 +988,123 @@ export async function updatePropertyStatusController(c: Context<AppEnv>) {
         success: false,
         error: error.message || 'Failed to update property status',
         code: 'PROPERTY_STATUS_ERROR',
+      },
+      500
+    )
+  }
+}
+
+/**
+ * 8.1 Update Property Website Settings & Best Property Status
+ * Endpoint: PATCH /v1/properties/:id/website-settings
+ */
+export async function updatePropertyWebsiteSettingsController(c: Context<AppEnv>) {
+  const prisma = c.get('prisma')
+  const user = c.get('user')
+  const id = c.req.param('id')
+  if (!id) return c.json({ success: false, error: 'Property ID is required', code: 'INVALID_ID' }, 400)
+  const body = c.req.valid('json' as never) as UpdatePropertyWebsiteSettingsInput
+
+  try {
+    const partnerId = await resolveSourcePartnerId(prisma, user)
+
+    const existing = await prisma.property.findUnique({
+      where: { id },
+    })
+
+    if (!existing) {
+      return c.json(
+        {
+          success: false,
+          error: 'Property not found.',
+          code: 'PROPERTY_NOT_FOUND',
+        },
+        404
+      )
+    }
+
+    // If turning ON isBestProperty, enforce maximum 3 limit
+    if (body.isBestProperty === true && !existing.isBestProperty) {
+      const currentBestCount = await prisma.property.count({
+        where: {
+          isBestProperty: true,
+          isArchived: false,
+          id: { not: id },
+        },
+      })
+      if (currentBestCount >= 3) {
+        return c.json(
+          {
+            success: false,
+            error: 'Maximum 3 properties can be marked as Best Properties. Please unmark another property first.',
+            code: 'BEST_PROPERTIES_LIMIT_EXCEEDED',
+            currentBestCount,
+          },
+          400
+        )
+      }
+    }
+
+    let showInWebsite = body.showInWebsite !== undefined ? body.showInWebsite : existing.showInWebsite
+    let isBestProperty = body.isBestProperty !== undefined ? body.isBestProperty : existing.isBestProperty
+
+    // Rule: If marked as Best Property, it must also be visible on website
+    if (body.isBestProperty === true) {
+      showInWebsite = true
+    }
+    // Rule: If unpublished from website, it cannot remain a Best Property
+    if (body.showInWebsite === false) {
+      isBestProperty = false
+    }
+
+    const updated = await prisma.property.update({
+      where: { id },
+      data: {
+        showInWebsite,
+        isBestProperty,
+      },
+      include: {
+        media: { orderBy: { order: 'asc' } },
+        owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
+        broker: { select: { id: true, name: true, phone: true, email: true } },
+        sourcePartner: { select: { id: true, name: true, email: true } },
+      },
+    })
+
+    const bestPropertiesCount = await prisma.property.count({
+      where: { isBestProperty: true, isArchived: false, isDraft: false },
+    })
+
+    await prisma.propertyAuditLog.create({
+      data: {
+        propertyId: id,
+        userId: partnerId,
+        action: 'WEBSITE_SETTINGS_UPDATED',
+        description: `Website settings updated: showInWebsite=${showInWebsite}, isBestProperty=${isBestProperty}`,
+        changes: {
+          old: { showInWebsite: existing.showInWebsite, isBestProperty: existing.isBestProperty },
+          new: { showInWebsite, isBestProperty },
+        },
+      },
+    })
+
+    return c.json({
+      success: true,
+      message: isBestProperty
+        ? 'Property featured in Best Properties showcase and published to website.'
+        : showInWebsite
+        ? 'Property published to public website listing.'
+        : 'Property removed from public website and Best Properties showcase.',
+      property: updated,
+      bestPropertiesCount,
+    })
+  } catch (error: any) {
+    console.error('Failed to update property website settings:', error)
+    return c.json(
+      {
+        success: false,
+        error: error.message || 'Failed to update property website settings',
+        code: 'PROPERTY_WEBSITE_SETTINGS_ERROR',
       },
       500
     )
@@ -1545,6 +1718,8 @@ export async function getPropertyStatsController(c: Context<AppEnv>) {
       dealDoneCount,
       directCount,
       brokerCount,
+      websiteVisibleCount,
+      bestPropertiesCount,
     ] = await Promise.all([
       prisma.property.count({ where: { isArchived: false, isDraft: false } }),
       prisma.property.count({
@@ -1570,6 +1745,12 @@ export async function getPropertyStatsController(c: Context<AppEnv>) {
       prisma.property.count({
         where: { isArchived: false, isDraft: false, accessType: 'BROKER' },
       }),
+      prisma.property.count({
+        where: { isArchived: false, isDraft: false, showInWebsite: true },
+      }),
+      prisma.property.count({
+        where: { isArchived: false, isDraft: false, isBestProperty: true },
+      }),
     ])
 
     return c.json({
@@ -1581,6 +1762,8 @@ export async function getPropertyStatsController(c: Context<AppEnv>) {
         dealDoneCount,
         directCount,
         brokerCount,
+        websiteVisibleCount,
+        bestPropertiesCount,
       },
     })
   } catch (error: any) {

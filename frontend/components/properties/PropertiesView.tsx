@@ -25,6 +25,9 @@ import {
   Bookmark,
   BookmarkPlus,
   ExternalLink,
+  MoreVertical,
+  Globe,
+  Star,
 } from 'lucide-react'
 import { useRouter } from '../../context/NavigationLoaderContext'
 import { useDebounce } from '../../utils/useDebounce'
@@ -45,6 +48,7 @@ import { PropertyFormModal } from './PropertyFormModal'
 import { PropertyDetailModal } from './PropertyDetailModal'
 import { DeletePropertyConfirmModal } from './DeletePropertyConfirmModal'
 import { SaveFilterPresetModal } from './SaveFilterPresetModal'
+import { PropertyWebsiteModal } from './PropertyWebsiteModal'
 import { formatBHK, formatSqFt, formatIndianCurrency } from '../../utils/formatters'
 import type {
   Property,
@@ -255,6 +259,7 @@ export function PropertiesView() {
   const [minPrice, setMinPrice] = useState<number | undefined>(undefined)
   const [maxPrice, setMaxPrice] = useState<number | undefined>(undefined)
   const [selectedArea, setSelectedArea] = useState<string>('')
+  const [selectedShowcase, setSelectedShowcase] = useState<'' | 'website' | 'best' | 'internal'>('')
   const [sortBy] = useState<'createdAt' | 'updatedAt' | 'askingPrice'>('createdAt')
   const [sortOrder] = useState<'asc' | 'desc'>('desc')
 
@@ -272,6 +277,11 @@ export function PropertiesView() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
   const [deletingProperty, setDeletingProperty] = useState<Property | null>(null)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+
+  // Website Visibility & Best Properties (3 dots modal)
+  const [selectedWebsiteProperty, setSelectedWebsiteProperty] = useState<Property | null>(null)
+  const [isWebsiteModalOpen, setIsWebsiteModalOpen] = useState(false)
+  const [bestPropertiesCount, setBestPropertiesCount] = useState<number>(0)
 
   // Close presets dropdown on outside click
   useEffect(() => {
@@ -325,10 +335,23 @@ export function PropertiesView() {
           queryParams.bedrooms = selectedBedrooms
         }
 
+        if (selectedShowcase === 'website') {
+          queryParams.showInWebsite = 'true'
+        } else if (selectedShowcase === 'best') {
+          queryParams.isBestProperty = 'true'
+        } else if (selectedShowcase === 'internal') {
+          queryParams.showInWebsite = 'false'
+        }
+
         const data = await getProperties(queryParams)
         if (request !== listRequestRef.current) return
         setProperties(data.properties)
         setPagination(data.pagination)
+        if (data.bestPropertiesCount !== undefined) {
+          setBestPropertiesCount(data.bestPropertiesCount)
+        } else {
+          setBestPropertiesCount(data.properties.filter((p) => p.isBestProperty).length)
+        }
       } catch (err) {
         if (request === listRequestRef.current) handleActionApiError(err, 'Failed to load properties')
       } finally {
@@ -342,6 +365,7 @@ export function PropertiesView() {
       selectedAccessType,
       selectedArea,
       selectedBedrooms,
+      selectedShowcase,
       minPrice,
       maxPrice,
       sortBy,
@@ -419,6 +443,7 @@ export function PropertiesView() {
     setSelectedAccessType('')
     setSelectedBedrooms('')
     setSelectedBudgetKey('')
+    setSelectedShowcase('')
     setMinPrice(undefined)
     setMaxPrice(undefined)
     setSelectedArea('')
@@ -430,6 +455,7 @@ export function PropertiesView() {
       selectedStatus ||
       selectedAccessType ||
       selectedBedrooms ||
+      selectedShowcase ||
       minPrice !== undefined ||
       maxPrice !== undefined ||
       selectedArea
@@ -501,6 +527,26 @@ export function PropertiesView() {
     }
     setDeletingProperty(prop)
     setIsDeleteModalOpen(true)
+  }
+
+  const handleOpenWebsiteModal = (prop: Property, e?: React.MouseEvent) => {
+    e?.stopPropagation()
+    if (!hasPermission('properties:update')) {
+      toast.error('Permission Denied', 'You do not have permission to manage website visibility.')
+      return
+    }
+    setSelectedWebsiteProperty(prop)
+    setIsWebsiteModalOpen(true)
+  }
+
+  const handleWebsitePropertyUpdated = (updatedProperty: Property, newBestCount: number) => {
+    setProperties((prev) =>
+      prev.map((p) => (p.id === updatedProperty.id ? { ...p, ...updatedProperty } : p))
+    )
+    setSelectedWebsiteProperty((curr) =>
+      curr?.id === updatedProperty.id ? { ...curr, ...updatedProperty } : curr
+    )
+    setBestPropertiesCount(newBestCount)
   }
 
   const handleBrokerClick = (brokerId: string, e: React.MouseEvent) => {
@@ -682,6 +728,20 @@ export function PropertiesView() {
                 label: b.label,
                 value: b.value,
               }))}
+            />
+
+            {/* 5.1 Website & Best Properties Showcase Filter */}
+            <FilterDropdown<string>
+              label="Showcase"
+              value={selectedShowcase}
+              onChange={(v) => setSelectedShowcase(v as any)}
+              widthClass="w-52"
+              options={[
+                { label: 'All Stock', value: '' },
+                { label: 'Web Listed Only', value: 'website' },
+                { label: `Best Properties (${bestPropertiesCount}/3)`, value: 'best' },
+                { label: 'Internal CRM Only', value: 'internal' },
+              ]}
             />
 
             {/* 6. Filter Presets Dropdown (FR-SF-09) */}
@@ -967,7 +1027,34 @@ export function PropertiesView() {
 
                     {/* Status */}
                     <td className="py-3 px-3.5">
-                      <PropertyStatusBadge status={property.availabilityStatus} />
+                      <div className="flex flex-col gap-1 items-start">
+                        <PropertyStatusBadge status={property.availabilityStatus} />
+                        <div className="flex items-center gap-1 flex-wrap">
+                          {property.isBestProperty && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-gold/15 text-gold border border-gold/40 text-[8px] font-black uppercase tracking-wider font-mono"
+                              title="Featured in Top 3 Best Properties (/best-properties)"
+                            >
+                              <Star className="w-2.5 h-2.5 fill-gold text-gold" /> Best
+                            </span>
+                          )}
+                          {property.showInWebsite ? (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-[8px] font-bold uppercase tracking-wider font-mono"
+                              title="Live on public website listing (/website/properties/list)"
+                            >
+                              <Globe className="w-2.5 h-2.5" /> Web
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-surface-secondary text-muted-text/80 border border-border text-[8px] font-bold uppercase tracking-wider font-mono"
+                              title="Internal CRM stock only"
+                            >
+                              Internal
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </td>
 
                     {/* Actions */}
@@ -999,6 +1086,14 @@ export function PropertiesView() {
                           title="Delete Property & Purge Media"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => handleOpenWebsiteModal(property, e)}
+                          className="p-1.5 border border-border text-muted-text hover:text-gold hover:border-gold/50 hover:bg-surface-secondary transition-colors cursor-pointer"
+                          title="Website & Best Properties Settings"
+                        >
+                          <MoreVertical className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -1044,7 +1139,19 @@ export function PropertiesView() {
 
                   {/* Top Overlay Badges */}
                   <div className="absolute top-2.5 left-2.5 right-2.5 flex items-center justify-between gap-2 pointer-events-none">
-                    <PropertyStatusBadge status={property.availabilityStatus} />
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <PropertyStatusBadge status={property.availabilityStatus} />
+                      {property.isBestProperty && (
+                        <span className="px-2 py-0.5 bg-black/85 backdrop-blur-xs border border-gold/50 text-[9px] font-mono font-black uppercase text-gold flex items-center gap-1 shadow-xs">
+                          <Star className="w-2.5 h-2.5 fill-gold text-gold" /> Best
+                        </span>
+                      )}
+                      {property.showInWebsite && !property.isBestProperty && (
+                        <span className="px-2 py-0.5 bg-black/85 backdrop-blur-xs border border-emerald-500/40 text-[9px] font-mono font-bold uppercase text-emerald-400 flex items-center gap-1 shadow-xs">
+                          <Globe className="w-2.5 h-2.5" /> Web
+                        </span>
+                      )}
+                    </div>
                     <span className="px-2 py-0.5 bg-black/80 backdrop-blur-xs border border-white/20 text-[9px] font-bold uppercase tracking-wider text-white">
                       {property.propertyType}
                     </span>
@@ -1180,6 +1287,14 @@ export function PropertiesView() {
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleOpenWebsiteModal(property, e)}
+                        className="p-1.5 border border-border text-muted-text hover:text-gold hover:border-gold/50 hover:bg-surface-secondary transition-colors cursor-pointer"
+                        title="Website & Best Properties Settings"
+                      >
+                        <MoreVertical className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -1297,6 +1412,10 @@ export function PropertiesView() {
           if (selectedPropertyDetail) getPropertyById(selectedPropertyDetail.id).then(fresh => setSelectedPropertyDetail(current => current?.id === fresh.id ? fresh : current)).catch(error => handleActionApiError(error, 'Unable to refresh property'))
           fetchPropertiesList(pagination.page)
         }}
+        onOpenWebsiteModal={(prop) => {
+          setIsDetailModalOpen(false)
+          handleOpenWebsiteModal(prop)
+        }}
       />
 
       {/* Delete Confirmation Modal */}
@@ -1329,6 +1448,18 @@ export function PropertiesView() {
         onPresetSaved={(newPreset) => {
           setPresets((prev) => [newPreset, ...prev])
         }}
+      />
+
+      {/* Website Visibility & Best Properties Modal (3-dots Action) */}
+      <PropertyWebsiteModal
+        isOpen={isWebsiteModalOpen}
+        onClose={() => {
+          setIsWebsiteModalOpen(false)
+          setSelectedWebsiteProperty(null)
+        }}
+        property={selectedWebsiteProperty}
+        bestPropertiesCount={bestPropertiesCount}
+        onUpdated={handleWebsitePropertyUpdated}
       />
     </div>
   )
