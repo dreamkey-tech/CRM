@@ -33,12 +33,17 @@ This document provides complete instructions, architecture flows, API contracts,
 | `GET` | `/api/auth/get-session` | Returns current user & session object (or `null` if unauthenticated). |
 | `POST` | `/api/auth/sign-out` | Logs out the user and clears the session cookie. |
 
-### B. Email / Password Authentication
+### B. Website User Email / Password Authentication (4-Digit OTP Flow)
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/v1/user/auth/register` | Creates account, sets cookie, returns `{ user: { id, name, email } }`. |
-| `POST` | `/v1/user/auth/login` | Logs in, sets cookie, returns `{ user: { id, name, email } }`. |
-| `GET` | `/v1/user/auth/me` | Hydrates current user profile from cookie. |
+| `POST` | `/v1/user/auth/register` | Creates account, sets cookie, returns `{ user: { id, name, email, emailVerified } }`. |
+| `POST` | `/v1/user/auth/login` | Step 1: Validates credentials, generates 4-digit OTP valid for 5 min, sent from `info@dreamkeykol.com`. |
+| `POST` | `/v1/user/auth/verify-login-otp` | Step 2: Verifies 4-digit OTP, sets `emailVerified=true`, sets HttpOnly session cookies, logs in. |
+| `POST` | `/v1/user/auth/resend-otp` | Resends 4-digit OTP for either `LOGIN` or `PASSWORD_RESET` (valid for 5 mins). |
+| `POST` | `/v1/user/auth/forgot-password` | Step 1: Dispatches 4-digit password reset OTP to email from `info@dreamkeykol.com` (valid for 5 mins). |
+| `POST` | `/v1/user/auth/verify-reset-otp` | Step 2: (Optional) Pre-checks if the 4-digit reset OTP is valid. |
+| `POST` | `/v1/user/auth/reset-password` | Step 3: Submits email + 4-digit OTP + new password. Updates password, invalidates old sessions. |
+| `GET` | `/v1/user/auth/me` | Hydrates current user profile (including `emailVerified`) from cookie. |
 | `POST` | `/v1/user/auth/refresh` | Extends/rotates the session cookie. |
 | `POST` | `/v1/user/auth/logout` | Clears cookie and terminates session. |
 
@@ -81,63 +86,98 @@ This document provides complete instructions, architecture flows, API contracts,
 
 ---
 
-### Flow 2: Email & Password Registration / Login
+### Flow 2: Website User 4-Digit OTP Login Flow
 
-#### 1. Register: `POST /v1/user/auth/register`
+```
+1. User enters email & password.
+2. Frontend sends: POST /v1/user/auth/login
+   Body: { "email": "user@example.com", "password": "securepassword123" }
+3. Backend validates credentials, generates a 4-digit numeric OTP (e.g. "4829") valid for 5 minutes.
+4. Backend dispatches OTP email from: info@dreamkeykol.com
+   Response (200 OK):
+   {
+     "success": true,
+     "requiresOtp": true,
+     "message": "A 4-digit verification code has been sent to your email. Valid for 5 minutes.",
+     "email": "user@example.com"
+   }
+5. Frontend transitions to the OTP entry screen / modal (showing 5-minute timer countdown).
+6. User enters the 4-digit code.
+7. Frontend sends: POST /v1/user/auth/verify-login-otp
+   Body: { "email": "user@example.com", "otp": "4829" }
+8. Backend checks OTP:
+   - Validates OTP matches and has not expired (< 5 mins).
+   - Marks emailVerified = true in database.
+   - Sets secure HttpOnly session cookies (access_token & better-auth.session_token).
+   - Returns:
+     {
+       "success": true,
+       "message": "Login successful. Email verified.",
+       "user": {
+         "id": "uuid-here",
+         "name": "Jane Doe",
+         "email": "user@example.com",
+         "emailVerified": true
+       }
+     }
+9. User is now fully logged in and verified.
+```
+
+#### Resending OTP: `POST /v1/user/auth/resend-otp`
+If the 5 minutes expire or the user didn't receive the email:
 * **Request Body**:
   ```json
   {
-    "name": "Jane Doe",
-    "email": "jane@example.com",
-    "password": "securepassword123"
-  }
-  ```
-* **Success (201 Created)**:
-  * Headers: `Set-Cookie: access_token=...; HttpOnly; SameSite=Lax`
-  * Body:
-    ```json
-    {
-      "user": {
-        "id": "uuid-here",
-        "name": "Jane Doe",
-        "email": "jane@example.com"
-      }
-    }
-    ```
-
-#### 2. Login: `POST /v1/user/auth/login`
-* **Request Body**:
-  ```json
-  {
-    "email": "jane@example.com",
-    "password": "securepassword123"
+    "email": "user@example.com",
+    "purpose": "LOGIN"
   }
   ```
 * **Success (200 OK)**:
-  * Headers: `Set-Cookie: access_token=...; HttpOnly; SameSite=Lax`
-  * Body:
-    ```json
-    {
-      "user": {
-        "id": "uuid-here",
-        "name": "Jane Doe",
-        "email": "jane@example.com"
-      }
-    }
-    ```
-* **Special Case (Google Account Warning)**:
-  If a user created their account with Google and tries to log in with a password:
-  * Status: `400 Bad Request`
-  * Body:
-    ```json
-    {
-      "message": "This account was created with Google. Please sign in using Google.",
-      "code": "USE_GOOGLE_LOGIN"
-    }
-    ```
-  * *Action for Frontend*: Display a prompt asking the user to click the "Sign in with Google" button.
+  ```json
+  {
+    "success": true,
+    "message": "A new 4-digit verification code has been sent to your email. Valid for 5 minutes.",
+    "email": "user@example.com"
+  }
+  ```
 
-#### 3. Hydrate User (On Page Refresh): `GET /v1/user/auth/me`
+---
+
+### Flow 3: Website User Password Reset Flow (4-Digit OTP)
+
+```
+1. User clicks "Forgot Password?" on login screen.
+2. User enters their email address.
+3. Frontend sends: POST /v1/user/auth/forgot-password
+   Body: { "email": "user@example.com" }
+4. Backend finds user, generates 4-digit OTP valid for 5 minutes, and sends email from info@dreamkeykol.com.
+   Response (200 OK):
+   {
+     "success": true,
+     "message": "A 4-digit password reset code has been sent to your email. Valid for 5 minutes.",
+     "email": "user@example.com"
+   }
+5. Frontend displays OTP & New Password form.
+   (Optional Step: call POST /v1/user/auth/verify-reset-otp { email, otp } to pre-check code)
+6. User enters 4-digit OTP and new password (min 6 characters).
+7. Frontend sends: POST /v1/user/auth/reset-password
+   Body: {
+     "email": "user@example.com",
+     "otp": "4829",
+     "newPassword": "newSecurePassword123"
+   }
+8. Backend verifies OTP, updates passwordHash, marks emailVerified=true, revokes older sessions.
+   Response (200 OK):
+   {
+     "success": true,
+     "message": "Password reset successfully. You can now login with your new password."
+   }
+9. Frontend redirects user to Login screen with success toast notification.
+```
+
+---
+
+#### 4. Hydrate User (On Page Refresh): `GET /v1/user/auth/me`
 * Call this inside your root `AuthProvider` or layout `useEffect`.
 * **Success (200 OK)**:
   ```json
@@ -145,13 +185,14 @@ This document provides complete instructions, architecture flows, API contracts,
     "user": {
       "id": "uuid-here",
       "name": "Jane Doe",
-      "email": "jane@example.com"
+      "email": "jane@example.com",
+      "emailVerified": true
     }
   }
   ```
 * **Failure (401 Unauthorized)**: Clear user state in store/context.
 
-#### 4. Logout: `POST /v1/user/auth/logout`
+#### 5. Logout: `POST /v1/user/auth/logout`
 * Clears cookie and terminates session.
 * Redirect user to `/login`.
 
@@ -457,3 +498,166 @@ const fetchWebsiteUserStats = async () => {
   */
 };
 ```
+
+---
+
+## 🏡 Website Property APIs
+
+These endpoints power the public property catalogue and authenticated property details on the DreamKey website. Properties only appear when the admin toggles **"Show on Website"** (`showInWebsite: true`).
+
+### Endpoints Table
+
+| Method | Endpoint | Auth Required | Description |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/website/properties/list` (or `/v1/website/properties/list`) | **No (Public)** | Returns all public properties with `showInWebsite: true`. Only public card fields + R2 cover image. Supports search & filters. |
+| `POST` | `/website/properties/list/:id/click` (or `/:id/click`) | **Yes (Website Auth)** | Records user click / view interest for that property in `website_property_clicks`. |
+| `GET` | `/website/properties/list/:id` (or `/:id`) | **Yes (Website Auth)** | Returns full sanitized property details. Strictly excludes sensitive CRM broker/owner info, notes, and private PDFs. |
+
+---
+
+### 1. Public Property Listing API
+
+* **URL**: `GET /website/properties/list` (or `GET /v1/website/properties/list`)
+* **Auth**: None (Public)
+* **Optional Query Parameters**:
+  * `page`: Page number (default: 1)
+  * `limit`: Page size (default: 12, max: 50)
+  * `search`: Society / building name, location, or city
+  * `locationArea`: Location / area filter (e.g. `New Town`, `Bandra`)
+  * `city`: City filter (e.g. `Kolkata`, `Mumbai`)
+  * `propertyType`: `FLAT`, `LAND`, `WAREHOUSE`, `COMMERCIAL`, `OTHER`
+  * `pricingType`: `SALE` or `RENT`
+  * `minPrice`: Minimum asking price in INR
+  * `maxPrice`: Maximum asking price in INR
+  * `bedrooms`: Bedrooms (e.g. `2`, `3`, `4`, `4+`)
+  * `sortBy`: `createdAt`, `askingPrice`, `carpetAreaSqFt`, `societyBuildingName`
+  * `sortOrder`: `desc` or `asc`
+
+#### Example Response:
+```json
+{
+  "success": true,
+  "properties": [
+    {
+      "id": "e8d64115-3bd1-4043-b9df-cf822cb2adba",
+      "propertyType": "FLAT",
+      "societyBuildingName": "DreamKey Altura",
+      "locationArea": "New Town Action Area II",
+      "city": "Kolkata",
+      "carpetAreaSqFt": 1850,
+      "superBuiltUpAreaSqFt": 2750,
+      "askingPrice": 18500000,
+      "pricingType": "SALE",
+      "bedrooms": 3,
+      "bathrooms": 3,
+      "amenities": ["Lake Facing", "Sky Lounge", "Gymnasium", "Swimming Pool"],
+      "availabilityStatus": "AVAILABLE",
+      "coverImage": "https://pub-xxx.r2.dev/properties/e8d.../cover.jpg",
+      "previewImages": [
+        "https://pub-xxx.r2.dev/properties/e8d.../cover.jpg",
+        "https://pub-xxx.r2.dev/properties/e8d.../living.jpg"
+      ]
+    }
+  ],
+  "pagination": {
+    "total": 8,
+    "page": 1,
+    "limit": 12,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}
+```
+
+---
+
+### 2. Property Click / Interest Tracking API
+
+* **URL**: `POST /website/properties/list/:id/click` (or `POST /v1/website/properties/list/:id/click`)
+* **Auth**: **Website Auth Required** (Pass session cookie or `Authorization: Bearer <token>`)
+* **Description**: Call this when a logged-in user clicks on a property card to view details. Logs the user's ID, property ID, IP address, and User-Agent.
+
+#### Example Request:
+```typescript
+await api.post(`/website/properties/list/${propertyId}/click`, {}, { withCredentials: true });
+```
+
+#### Example Response:
+```json
+{
+  "success": true,
+  "message": "Property click recorded successfully",
+  "data": {
+    "clickId": "c9284fae-f6bb-495c-9c02-7634f5debc98",
+    "propertyId": "e8d64115-3bd1-4043-b9df-cf822cb2adba",
+    "societyBuildingName": "DreamKey Altura",
+    "userId": "9618f096-7a13-4f18-bb9f-5182069e2ae2",
+    "userEmail": "user@gmail.com",
+    "recordedAt": "2026-11-01T11:20:00.000Z"
+  }
+}
+```
+
+---
+
+### 3. Authenticated Property Details API
+
+* **URL**: `GET /website/properties/list/:id` (or `GET /v1/website/properties/list/:id`)
+* **Auth**: **Website Auth Required** (Pass session cookie or `Authorization: Bearer <token>`)
+* **Description**: Returns all public specifications, floor details, amenities, and safe media (photographs, videos, floor plans).
+* **Security**: Automatically strips all internal CRM notes, broker/owner personal contacts, and confidential internal documents.
+
+#### Example Response:
+```json
+{
+  "success": true,
+  "property": {
+    "id": "e8d64115-3bd1-4043-b9df-cf822cb2adba",
+    "propertyType": "FLAT",
+    "societyBuildingName": "DreamKey Altura",
+    "locationArea": "New Town Action Area II",
+    "city": "Kolkata",
+    "pincode": "700156",
+    "floorNumber": 14,
+    "totalFloors": 25,
+    "bedrooms": 3,
+    "bathrooms": 3,
+    "balconies": 2,
+    "carpetAreaSqFt": 1850,
+    "superBuiltUpAreaSqFt": 2750,
+    "pricingType": "SALE",
+    "askingPrice": 18500000,
+    "availabilityStatus": "AVAILABLE",
+    "availabilityDate": null,
+    "builderName": "DreamKey Infra",
+    "yearOfConstruction": 2024,
+    "totalUnits": 150,
+    "amenities": ["Lake Facing", "Sky Lounge", "Gymnasium", "Swimming Pool"],
+    "reraNumber": "WBRERA/P/KOL/2024/001",
+    "coverImage": "https://pub-xxx.r2.dev/properties/e8d.../cover.jpg",
+    "media": [
+      {
+        "id": "media-1",
+        "category": "PHOTOGRAPH",
+        "title": "Front Elevation",
+        "url": "https://pub-xxx.r2.dev/properties/e8d.../cover.jpg",
+        "thumbnailUrl": null,
+        "isCover": true,
+        "order": 0
+      },
+      {
+        "id": "media-2",
+        "category": "FLOOR_PLAN",
+        "title": "3 BHK Master Layout",
+        "url": "https://pub-xxx.r2.dev/properties/e8d.../floorplan.jpg",
+        "thumbnailUrl": null,
+        "isCover": false,
+        "order": 1
+      }
+    ],
+    "createdAt": "2026-10-30T10:15:00.000Z"
+  }
+}
+```
+

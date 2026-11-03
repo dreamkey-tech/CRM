@@ -156,6 +156,21 @@ export const updateRoleController = async (c: Context<AppEnv>) => {
     )
   }
 
+  const callerPerms = c.get('permissions') || []
+  const isCallerSuperAdmin = callerPerms.includes('*:*')
+
+  // Prevent non-super admins from modifying the SUPER_ADMIN role
+  if (role.name === 'SUPER_ADMIN' && !isCallerSuperAdmin) {
+    return c.json(
+      {
+        success: false,
+        error: 'The SUPER_ADMIN role can only be modified by a Super Administrator.',
+        code: 'SUPER_ADMIN_PROTECTED',
+      },
+      403
+    )
+  }
+
   // Prevent modifying the system SUPER_ADMIN role name
   if (role.isSystem && body.name && body.name !== role.name) {
     return c.json(
@@ -166,6 +181,21 @@ export const updateRoleController = async (c: Context<AppEnv>) => {
       },
       400
     )
+  }
+
+  // Prevent non-super admins from assigning wildcard *:* permission
+  if (body.permissionIds && body.permissionIds.length > 0 && !isCallerSuperAdmin) {
+    const wildcardPerm = await prisma.permission.findUnique({ where: { name: '*:*' } })
+    if (wildcardPerm && body.permissionIds.includes(wildcardPerm.id)) {
+      return c.json(
+        {
+          success: false,
+          error: 'Only Super Administrators can assign wildcard permissions.',
+          code: 'SUPER_ADMIN_REQUIRED',
+        },
+        403
+      )
+    }
   }
 
   // Transaction: update details & replace permissions

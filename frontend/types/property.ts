@@ -77,6 +77,7 @@ export interface Property {
   isDraft: boolean
   isArchived: boolean
   archivedAt?: string | null
+  showInWebsite?: boolean
   propertyType: PropertyType
   societyBuildingName: string
   locationArea: string
@@ -154,6 +155,7 @@ export interface PropertyFilterParams {
   brokerId?: string
   isDraft?: 'true' | 'false' | 'all'
   isArchived?: 'true' | 'false' | 'all'
+  showInWebsite?: 'true' | 'false' | 'all'
   sortBy?: 'createdAt' | 'updatedAt' | 'askingPrice' | 'carpetAreaSqFt' | 'societyBuildingName'
   sortOrder?: 'asc' | 'desc'
 }

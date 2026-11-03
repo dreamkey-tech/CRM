@@ -36,7 +36,9 @@ import {
   Check,
   Smartphone,
   ExternalLink,
+  Building2,
 } from 'lucide-react'
+import { formatIndianCurrency } from '../../utils/formatters'
 import {
   AreaChart,
   Area,
@@ -293,7 +295,7 @@ function UserDetailModal({ userId, isDark, onClose, onToggleStatus }: UserDetail
           ) : (
             <>
               {/* Quick stats row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 divide-x divide-border">
+              <div className="grid grid-cols-2 sm:grid-cols-5 divide-x divide-border">
                 <div className="px-4 py-3">
                   <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text block mb-1">Status</span>
                   {detail.isActive ? (
@@ -320,6 +322,11 @@ function UserDetailModal({ userId, isDark, onClose, onToggleStatus }: UserDetail
                   <span className={`text-xs font-bold uppercase tracking-wider ${detail.emailVerified ? 'text-foreground' : 'text-gold'}`}>
                     {detail.emailVerified ? 'Verified' : 'Unverified'}
                   </span>
+                </div>
+                <div className="px-4 py-3">
+                  <span className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text block mb-1">Properties Viewed</span>
+                  <span className="text-sm font-bold text-foreground">{detail.propertyClicks?.length || 0}</span>
+                  {(detail.propertyClicks?.length || 0) > 0 && <span className="text-[10px] text-gold font-bold ml-1">(Active)</span>}
                 </div>
               </div>
 
@@ -379,6 +386,88 @@ function UserDetailModal({ userId, isDark, onClose, onToggleStatus }: UserDetail
                   </div>
                 )}
               </div>
+
+              {/* Property Click / Interest History */}
+              <div className="px-5 py-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-3.5 h-3.5 text-gold" />
+                    <h4 className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text">
+                      Clicked Properties ({detail.propertyClicks?.length || 0})
+                    </h4>
+                  </div>
+                  {detail.propertyClicks && detail.propertyClicks.length > 0 && (
+                    <span className="text-[8px] font-black uppercase px-2 py-0.5 bg-gold/15 text-gold border border-gold/30 font-mono">
+                      Active Customer Interest
+                    </span>
+                  )}
+                </div>
+
+                {!detail.propertyClicks || detail.propertyClicks.length === 0 ? (
+                  <div className="p-4 bg-surface-secondary/40 border border-border text-center">
+                    <p className="text-xs italic text-muted-text">This user has not clicked or viewed any properties on the website yet.</p>
+                  </div>
+                ) : (
+                  <div className="border border-border overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-surface-secondary border-b border-border">
+                        <tr>
+                          <th className="py-2 px-3 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-text">Property</th>
+                          <th className="py-2 px-3 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-text">Location & Pricing</th>
+                          <th className="py-2 px-3 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-text">Clicked At</th>
+                          <th className="py-2 px-3 text-[9px] font-bold uppercase tracking-[0.12em] text-muted-text">Device IP</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {detail.propertyClicks.map((click) => (
+                          <tr key={click.id} className="hover:bg-surface-secondary/30 transition-colors">
+                            <td className="py-2.5 px-3">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                {click.property.coverImage ? (
+                                  <img
+                                    src={click.property.coverImage}
+                                    alt=""
+                                    className="w-9 h-9 rounded-xs object-cover border border-border shrink-0"
+                                  />
+                                ) : (
+                                  <div className="w-9 h-9 rounded-xs bg-surface-secondary border border-border flex items-center justify-center shrink-0 text-muted-text">
+                                    <Building2 className="w-4 h-4" />
+                                  </div>
+                                )}
+                                <div className="min-w-0">
+                                  <p className="font-bold text-xs text-foreground truncate max-w-[160px]">
+                                    {click.property.societyBuildingName}
+                                  </p>
+                                  <span className="text-[9px] font-mono text-muted-text uppercase">
+                                    {click.property.propertyType} {click.property.bedrooms ? `• ${click.property.bedrooms} BHK` : ''}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <p className="text-[10px] text-muted-text truncate max-w-[140px]">{click.property.locationArea}</p>
+                              <p className="text-[10px] font-bold text-gold font-mono">
+                                {formatIndianCurrency(click.property.askingPrice)}
+                              </p>
+                            </td>
+                            <td className="py-2.5 px-3">
+                              <span className="text-[10px] font-semibold text-foreground block">
+                                {formatDateTime(click.createdAt)}
+                              </span>
+                              <span className="text-[9px] text-muted-text">
+                                ({formatRelativeTime(click.createdAt)})
+                              </span>
+                            </td>
+                            <td className="py-2.5 px-3 font-mono text-[10px] text-muted-text">
+                              {click.ipAddress || '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </>
           )}
         </div>
@@ -412,6 +501,283 @@ function UserDetailModal({ userId, isDark, onClose, onToggleStatus }: UserDetail
   )
 }
 
+// ── Cool Filter Dropdowns for Website Users ──────────────────────────────────
+interface CoolFilterOption<T> {
+  value: T
+  label: string
+  shortLabel?: string
+  description?: string
+  icon?: React.ComponentType<{ className?: string }>
+  badge?: string
+}
+
+const STATUS_OPTIONS: CoolFilterOption<'active' | 'inactive' | ''>[] = [
+  {
+    value: '',
+    label: 'All Status',
+    shortLabel: 'All',
+    description: 'Show active & deactivated accounts',
+    icon: Users,
+  },
+  {
+    value: 'active',
+    label: 'Active Accounts',
+    shortLabel: 'Active',
+    description: 'Can sign in & explore public listings',
+    icon: Shield,
+    badge: 'Active',
+  },
+  {
+    value: 'inactive',
+    label: 'Deactivated',
+    shortLabel: 'Deactivated',
+    description: 'Account access disabled by admin',
+    icon: ShieldOff,
+    badge: 'Disabled',
+  },
+]
+
+const AUTH_OPTIONS: CoolFilterOption<string>[] = [
+  {
+    value: '',
+    label: 'All Auth Methods',
+    shortLabel: 'All',
+    description: 'Email OTP & Google OAuth accounts',
+    icon: Globe,
+  },
+  {
+    value: 'EMAIL',
+    label: 'Email Passcode (OTP)',
+    shortLabel: 'Email',
+    description: 'Signed in with one-time verification code',
+    icon: Mail,
+    badge: 'OTP',
+  },
+  {
+    value: 'GOOGLE',
+    label: 'Google OAuth',
+    shortLabel: 'Google',
+    description: 'Signed in via Google One Tap SSO',
+    icon: KeyRound,
+    badge: 'OAuth',
+  },
+]
+
+const ACTIVITY_OPTIONS: CoolFilterOption<'true' | 'false' | ''>[] = [
+  {
+    value: '',
+    label: 'All Activity',
+    shortLabel: 'All',
+    description: 'All users regardless of click interest',
+    icon: Activity,
+  },
+  {
+    value: 'true',
+    label: 'Clicked Properties',
+    shortLabel: 'Clicked',
+    description: 'Customer explored property details',
+    icon: Building2,
+    badge: 'Engaged',
+  },
+  {
+    value: 'false',
+    label: 'No Property Clicks',
+    shortLabel: 'No Clicks',
+    description: 'Registered but has not viewed details yet',
+    icon: XCircle,
+    badge: 'Passive',
+  },
+]
+
+interface CoolFilterDropdownProps<T> {
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  value: T
+  options: CoolFilterOption<T>[]
+  onChange: (value: T) => void
+  menuTitle?: string
+  minWidthClass?: string
+}
+
+function CoolFilterDropdown<T extends string>({
+  label,
+  icon: TriggerIcon,
+  value,
+  options,
+  onChange,
+  menuTitle,
+  minWidthClass = 'w-64',
+}: CoolFilterDropdownProps<T>) {
+  const [isOpen, setIsOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setIsOpen(false)
+      }
+    }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setIsOpen(false)
+    }
+    if (isOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      document.addEventListener('keydown', handleKeyDown)
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [isOpen])
+
+  const selectedOption =
+    options.find((o) => o.value === value) ||
+    options.find((o) => o.value === '') ||
+    options[0]
+
+  const isFiltered = Boolean(value !== '')
+
+  return (
+    <div ref={ref} className="relative flex items-stretch border-t md:border-t-0 md:border-l border-border shrink-0">
+      <button
+        type="button"
+        onClick={() => setIsOpen((prev) => !prev)}
+        className={`w-full md:w-auto px-3.5 py-2.5 flex items-center justify-between gap-2.5 text-[10px] font-bold uppercase tracking-wider transition-all duration-150 cursor-pointer select-none whitespace-nowrap group ${
+          isFiltered
+            ? 'bg-gold/5 text-gold hover:bg-gold/10'
+            : 'text-muted-text hover:text-foreground hover:bg-surface-secondary/60'
+        } ${isOpen ? 'bg-surface-secondary/80 text-foreground' : ''}`}
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <TriggerIcon
+            className={`w-3.5 h-3.5 shrink-0 transition-colors ${
+              isFiltered ? 'text-gold' : 'text-muted-text/80 group-hover:text-foreground'
+            }`}
+          />
+          <span className="text-muted-text font-normal">{label}:</span>
+          <span
+            className={`font-black truncate max-w-[110px] tracking-wide ${
+              isFiltered ? 'text-gold' : 'text-foreground'
+            }`}
+          >
+            {selectedOption?.shortLabel || selectedOption?.label}
+          </span>
+          {isFiltered && (
+            <span className="w-1.5 h-1.5 rounded-full bg-gold shrink-0 animate-pulse" />
+          )}
+        </div>
+        <ChevronDown
+          className={`w-3 h-3 shrink-0 ml-1 transition-transform duration-200 text-muted-text group-hover:text-foreground ${
+            isOpen ? 'rotate-180 text-gold' : ''
+          }`}
+        />
+      </button>
+
+      {isOpen && (
+        <div
+          className={`absolute top-full right-0 mt-1.5 ${minWidthClass} max-w-[calc(100vw-2rem)] bg-[#0e0e11] border border-border shadow-[0_16px_40px_rgba(0,0,0,0.7)] z-50 divide-y divide-border/60 animate-in fade-in zoom-in-95 duration-150`}
+        >
+          {/* Header */}
+          <div className="px-3.5 py-2.5 bg-surface-secondary/60 flex items-center justify-between">
+            <span className="text-[9px] font-black uppercase tracking-widest text-muted-text flex items-center gap-1.5">
+              <TriggerIcon className="w-3 h-3 text-gold" />
+              {menuTitle || `Filter by ${label}`}
+            </span>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onChange('' as T)
+                  setIsOpen(false)
+                }}
+                className="text-[9px] font-bold uppercase tracking-wider text-muted-text hover:text-gold transition-colors cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+
+          {/* Options */}
+          <div className="py-1 max-h-72 overflow-y-auto divide-y divide-border/30">
+            {options.map((opt) => {
+              const isSelected = opt.value === value || (opt.value === '' && !value)
+              const OptionIcon = opt.icon
+
+              return (
+                <button
+                  key={String(opt.value) + opt.label}
+                  type="button"
+                  onClick={() => {
+                    onChange(opt.value)
+                    setIsOpen(false)
+                  }}
+                  className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-all duration-150 cursor-pointer group/item ${
+                    isSelected
+                      ? 'bg-gold/10 text-gold'
+                      : 'text-foreground hover:bg-surface-secondary/70 hover:text-foreground'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                    {OptionIcon && (
+                      <div
+                        className={`w-6 h-6 border flex items-center justify-center shrink-0 transition-colors ${
+                          isSelected
+                            ? 'border-gold/40 bg-gold/10 text-gold'
+                            : 'border-border/60 bg-surface text-muted-text group-hover/item:text-foreground group-hover/item:border-border'
+                        }`}
+                      >
+                        <OptionIcon className="w-3 h-3" />
+                      </div>
+                    )}
+                    <div className="flex flex-col min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span
+                          className={`text-xs tracking-tight truncate ${
+                            isSelected ? 'font-black text-gold' : 'font-semibold text-foreground'
+                          }`}
+                        >
+                          {opt.label}
+                        </span>
+                        {opt.badge && (
+                          <span
+                            className={`text-[8px] font-mono uppercase px-1.5 py-0.2 tracking-wider ${
+                              isSelected
+                                ? 'bg-gold text-black font-black'
+                                : 'bg-surface-secondary text-muted-text'
+                            }`}
+                          >
+                            {opt.badge}
+                          </span>
+                        )}
+                      </div>
+                      {opt.description && (
+                        <span className="text-[10px] text-muted-text/80 truncate leading-snug">
+                          {opt.description}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0 flex items-center">
+                    {isSelected ? (
+                      <div className="w-4 h-4 rounded-full bg-gold/20 flex items-center justify-center">
+                        <Check className="w-3 h-3 text-gold stroke-[3]" />
+                      </div>
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full bg-border/40 group-hover/item:bg-muted-text/40" />
+                    )}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface UsersTabContentProps {
   isDark: boolean
   onTotalUsersUpdate?: (count: number) => void
@@ -435,6 +801,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | ''>('')
   const [authProviderFilter, setAuthProviderFilter] = useState('')
+  const [hasClickedFilter, setHasClickedFilter] = useState<'true' | 'false' | ''>('')
   const [sortBy, setSortBy] = useState<'createdAt' | 'lastActiveAt' | 'loginCount' | 'name' | 'email'>('createdAt')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
   const [page, setPage] = useState(1)
@@ -458,6 +825,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
           search: debouncedSearch.trim() || undefined,
           status: statusFilter,
           authProvider: authProviderFilter,
+          hasClickedProperty: hasClickedFilter || undefined,
           sortBy,
           sortOrder,
         }),
@@ -472,7 +840,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
       setIsLoading(false)
       setIsRefreshing(false)
     }
-  }, [page, pagination.limit, debouncedSearch, statusFilter, authProviderFilter, sortBy, sortOrder, onTotalUsersUpdate])
+  }, [page, pagination.limit, debouncedSearch, statusFilter, authProviderFilter, hasClickedFilter, sortBy, sortOrder, onTotalUsersUpdate])
 
   useEffect(() => {
     loadData()
@@ -531,11 +899,12 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
         />
       </div>
 
-      {/* Control Bar */}
+      {/* Control Bar with Luxury Dropdowns */}
       <div className="bg-surface border border-border">
-        <div className="flex items-stretch border-b border-border">
-          <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-text pointer-events-none" />
+        <div className="flex flex-col md:flex-row items-stretch">
+          {/* Search Input */}
+          <div className="relative flex-1 flex items-center min-w-0">
+            <Search className="w-3.5 h-3.5 absolute left-3.5 text-muted-text pointer-events-none" />
             <input
               type="text"
               value={search}
@@ -544,7 +913,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
                 setPage(1)
               }}
               placeholder="Search accounts by name, email..."
-              className="w-full pl-10 pr-9 py-3 bg-transparent text-xs text-foreground placeholder:text-muted-text/50 focus:outline-none"
+              className="w-full pl-10 pr-9 py-2.5 bg-transparent text-xs text-foreground placeholder:text-muted-text/50 focus:outline-none"
             />
             {search && (
               <button
@@ -554,72 +923,172 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
                   setDebouncedSearch('')
                   setPage(1)
                 }}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-text hover:text-foreground transition-colors cursor-pointer"
+                className="absolute right-3 text-muted-text hover:text-foreground transition-colors cursor-pointer"
                 title="Clear search"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
-          <div className="flex items-center border-l border-border">
-            <button
-              onClick={() => {
-                setIsRefreshing(true)
-                loadData()
+
+          {/* Luxury Dropdowns Group */}
+          <div className="flex flex-wrap md:flex-nowrap items-stretch divide-y md:divide-y-0 md:divide-x divide-border">
+            {/* Status Dropdown */}
+            <CoolFilterDropdown<'active' | 'inactive' | ''>
+              label="Status"
+              icon={Shield}
+              value={statusFilter}
+              options={STATUS_OPTIONS}
+              onChange={(val) => {
+                setStatusFilter(val)
+                setPage(1)
               }}
-              disabled={isRefreshing}
-              className="h-full px-3.5 flex items-center gap-1.5 text-muted-text hover:text-foreground hover:bg-surface-secondary/50 transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-gold' : ''}`} />
-              <span className="hidden sm:inline">Refresh</span>
-            </button>
+              menuTitle="Account Status"
+              minWidthClass="w-64"
+            />
+
+            {/* Auth Method Dropdown */}
+            <CoolFilterDropdown<string>
+              label="Auth"
+              icon={KeyRound}
+              value={authProviderFilter}
+              options={AUTH_OPTIONS}
+              onChange={(val) => {
+                setAuthProviderFilter(val)
+                setPage(1)
+              }}
+              menuTitle="Authentication Method"
+              minWidthClass="w-72"
+            />
+
+            {/* Activity Dropdown */}
+            <CoolFilterDropdown<'true' | 'false' | ''>
+              label="Activity"
+              icon={Building2}
+              value={hasClickedFilter}
+              options={ACTIVITY_OPTIONS}
+              onChange={(val) => {
+                setHasClickedFilter(val)
+                setPage(1)
+              }}
+              menuTitle="Property Engagement"
+              minWidthClass="w-72"
+            />
+
+            {/* Refresh Button */}
+            <div className="flex items-center border-t md:border-t-0 md:border-l border-border shrink-0">
+              <button
+                onClick={() => {
+                  setIsRefreshing(true)
+                  loadData()
+                }}
+                disabled={isRefreshing}
+                className="w-full md:w-auto h-full px-3.5 py-2.5 flex items-center justify-center gap-1.5 text-muted-text hover:text-foreground hover:bg-surface-secondary/50 transition-colors text-[10px] font-bold uppercase tracking-wider cursor-pointer whitespace-nowrap"
+                title="Refresh customer data"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-gold' : ''}`} />
+                <span className="inline">Refresh</span>
+              </button>
+            </div>
           </div>
         </div>
-        {/* Filter row */}
-        <div className="flex items-center gap-1 px-2 py-2 overflow-x-auto no-scrollbar">
-          {[{ value: '', label: 'All Status' }, { value: 'active', label: 'Active' }, { value: 'inactive', label: 'Deactivated' }].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => { setStatusFilter(f.value as any); setPage(1) }}
-              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-colors cursor-pointer ${
-                statusFilter === f.value ? 'bg-foreground text-background' : 'text-muted-text hover:text-foreground'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          <div className="w-px h-4 bg-border mx-1" />
-          {[{ value: '', label: 'All Auth' }, { value: 'EMAIL', label: 'Email' }, { value: 'GOOGLE', label: 'Google' }].map((f) => (
-            <button
-              key={f.value}
-              onClick={() => { setAuthProviderFilter(f.value); setPage(1) }}
-              className={`px-3 py-1 text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-colors cursor-pointer ${
-                authProviderFilter === f.value ? 'bg-foreground text-background' : 'text-muted-text hover:text-foreground'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-          {debouncedSearch && (
-            <>
-              <div className="w-px h-4 bg-border mx-1" />
-              <span className="inline-flex items-center gap-1 px-2 py-1 bg-gold/10 text-[10px] font-bold uppercase tracking-wider text-gold shrink-0">
-                "{debouncedSearch}"
+
+        {/* Active Filters Bar (visible when any filter or search is active) */}
+        {(debouncedSearch || statusFilter || authProviderFilter || hasClickedFilter) && (
+          <div className="border-t border-border/60 bg-surface-secondary/40 px-3.5 py-2 flex flex-wrap items-center gap-2 text-[10px]">
+            <span className="text-muted-text uppercase font-bold tracking-wider flex items-center gap-1.5 shrink-0">
+              <Filter className="w-3 h-3 text-gold" />
+              Active Filters:
+            </span>
+
+            {debouncedSearch && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface border border-border text-foreground font-semibold">
+                <span className="text-muted-text">Search:</span> &quot;{debouncedSearch}&quot;
                 <button
+                  type="button"
                   onClick={() => {
                     setSearch('')
                     setDebouncedSearch('')
                     setPage(1)
                   }}
-                  className="hover:text-foreground cursor-pointer"
-                  title="Clear search"
+                  className="text-muted-text hover:text-gold cursor-pointer ml-0.5"
+                  title="Clear search filter"
                 >
-                  <X className="w-2.5 h-2.5" />
+                  <X className="w-3 h-3" />
                 </button>
               </span>
-            </>
-          )}
-        </div>
+            )}
+
+            {statusFilter && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface border border-gold/40 text-gold font-semibold">
+                <span className="text-muted-text">Status:</span>
+                {STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label || statusFilter}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatusFilter('')
+                    setPage(1)
+                  }}
+                  className="text-muted-text hover:text-gold cursor-pointer ml-0.5"
+                  title="Clear status filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {authProviderFilter && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface border border-gold/40 text-gold font-semibold">
+                <span className="text-muted-text">Auth:</span>
+                {AUTH_OPTIONS.find((o) => o.value === authProviderFilter)?.label || authProviderFilter}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthProviderFilter('')
+                    setPage(1)
+                  }}
+                  className="text-muted-text hover:text-gold cursor-pointer ml-0.5"
+                  title="Clear auth filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            {hasClickedFilter && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-surface border border-gold/40 text-gold font-semibold">
+                <span className="text-muted-text">Activity:</span>
+                {ACTIVITY_OPTIONS.find((o) => o.value === hasClickedFilter)?.label || hasClickedFilter}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setHasClickedFilter('')
+                    setPage(1)
+                  }}
+                  className="text-muted-text hover:text-gold cursor-pointer ml-0.5"
+                  title="Clear activity filter"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setSearch('')
+                setDebouncedSearch('')
+                setStatusFilter('')
+                setAuthProviderFilter('')
+                setHasClickedFilter('')
+                setPage(1)
+              }}
+              className="text-muted-text hover:text-gold transition-colors ml-auto font-bold uppercase tracking-wider underline cursor-pointer text-[9px]"
+            >
+              Clear All
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Users Table */}
@@ -639,7 +1108,7 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-border bg-surface-secondary">
-                  {['User', 'Auth Method', 'Logins', 'Last Active', 'Registered', 'Status', ''].map((h) => (
+                  {['User', 'Auth Method', 'Logins', 'Property Clicks', 'Last Active', 'Registered', 'Status', ''].map((h) => (
                     <th key={h} className="py-3 px-4 text-[9px] font-bold uppercase tracking-[0.15em] text-muted-text whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -676,6 +1145,17 @@ export function UsersTabContent({ isDark, onTotalUsersUpdate }: UsersTabContentP
                       <span className="text-xs font-bold text-foreground">{u.loginCount}</span>
                       {u.isReturningUser && (
                         <span className="ml-1 text-[10px] font-semibold text-gold">(Returning)</span>
+                      )}
+                    </td>
+
+                    <td className="py-3.5 px-4">
+                      {u.totalPropertyClicks && u.totalPropertyClicks > 0 ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-bold bg-gold/15 text-gold border border-gold/30 rounded-xs">
+                          <Building2 className="w-3 h-3" />
+                          {u.totalPropertyClicks} {u.totalPropertyClicks === 1 ? 'Click' : 'Clicks'}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-muted-text">—</span>
                       )}
                     </td>
 

@@ -1,5 +1,5 @@
 import type { Context } from 'hono'
-import { setCookie, deleteCookie } from 'hono/cookie'
+import { getCookie, setCookie, deleteCookie } from 'hono/cookie'
 import type { AppEnv } from '../db'
 import {
   hashPassword,
@@ -63,6 +63,18 @@ export const registerController = async (c: Context<AppEnv>) => {
   const totalUsers = await prisma.user.count()
   const isFirstUser = totalUsers === 0
 
+  // Public registration lock: Once the CRM has an initial Super Admin, only administrators can add users
+  if (!isFirstUser && (c.env as any)?.ALLOW_PUBLIC_REGISTRATION !== 'true') {
+    return c.json(
+      {
+        success: false,
+        error: 'Public registration is disabled. Please contact your CRM administrator to set up an account.',
+        code: 'REGISTRATION_DISABLED',
+      },
+      403
+    )
+  }
+
   // Create the user
   const user = await prisma.user.create({
     data: {
@@ -99,8 +111,12 @@ export const registerController = async (c: Context<AppEnv>) => {
     },
   })
 
-  const isProd = c.env?.DATABASE_URL?.includes('production') || false
-  const cookieOpts = getAuthCookieOptions(isProd)
+  const isHttps =
+    c.req.url.startsWith('https://') ||
+    c.req.header('x-forwarded-proto') === 'https' ||
+    (c.env?.BACKEND_URL && c.env.BACKEND_URL.startsWith('https://')) ||
+    false
+  const cookieOpts = getAuthCookieOptions(isHttps)
   setCookie(c, cookieOpts.name, token, {
     path: cookieOpts.path,
     httpOnly: cookieOpts.httpOnly,
@@ -217,8 +233,12 @@ export const loginController = async (c: Context<AppEnv>) => {
   })
 
   // Set the HttpOnly session cookie
-  const isProd = c.env?.DATABASE_URL?.includes('production') || false
-  const cookieOpts = getAuthCookieOptions(isProd)
+  const isHttps =
+    c.req.url.startsWith('https://') ||
+    c.req.header('x-forwarded-proto') === 'https' ||
+    (c.env?.BACKEND_URL && c.env.BACKEND_URL.startsWith('https://')) ||
+    false
+  const cookieOpts = getAuthCookieOptions(isHttps)
   setCookie(c, cookieOpts.name, token, {
     path: cookieOpts.path,
     httpOnly: cookieOpts.httpOnly,
@@ -285,12 +305,18 @@ export const getMeController = async (c: Context<AppEnv>) => {
  */
 export const logoutController = async (c: Context<AppEnv>) => {
   const prisma = c.get('prisma')
-  const token = c.req.header('cookie')?.match(new RegExp(`${AUTH_COOKIE_NAME}=([^;]+)`))?.[1]
+  let token = getCookie(c, AUTH_COOKIE_NAME)
+  if (!token) {
+    const authHeader = c.req.header('authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7).trim()
+    }
+  }
 
   if (token) {
     await prisma.session.deleteMany({
       where: { token },
-    })
+    }).catch(() => {})
   }
 
   deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' })

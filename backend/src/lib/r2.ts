@@ -2,7 +2,6 @@ import {
   S3Client,
   PutObjectCommand,
   DeleteObjectCommand,
-  DeleteObjectsCommand,
   HeadObjectCommand,
 } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
@@ -121,20 +120,23 @@ export async function deleteR2Objects(env: Bindings, keys: string[]): Promise<bo
     const bucket = env.R2_BUCKET_NAME
     if (!bucket) return false
 
-    // S3 DeleteObjects supports up to 1000 objects per request
-    const batchSize = 1000
+    // Cloudflare Workers runtime lacks DOMParser in global scope, which causes AWS SDK's
+    // DeleteObjectsCommand to fail with "ReferenceError: DOMParser is not defined" when
+    // deserializing the XML batch response. Using DeleteObjectCommand with concurrent
+    // batches is safe across both Node and Cloudflare Workers runtime.
+    const batchSize = 10
     for (let i = 0; i < validKeys.length; i += batchSize) {
       const batch = validKeys.slice(i, i + batchSize)
-      const result = await s3.send(
-        new DeleteObjectsCommand({
-          Bucket: bucket,
-          Delete: {
-            Objects: batch.map((Key) => ({ Key })),
-            Quiet: true,
-          },
-        })
+      await Promise.all(
+        batch.map((key) =>
+          s3.send(
+            new DeleteObjectCommand({
+              Bucket: bucket,
+              Key: key,
+            })
+          )
+        )
       )
-      if (result.Errors?.length) return false
     }
     return true
   } catch (error) {

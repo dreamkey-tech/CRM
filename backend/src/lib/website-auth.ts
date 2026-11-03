@@ -30,6 +30,16 @@ export function generateWebsiteSessionToken(): string {
 }
 
 /**
+ * Generate a cryptographically secure 4-digit numeric OTP code (1000 - 9999)
+ */
+export function generate4DigitOtp(): string {
+  const array = new Uint32Array(1)
+  crypto.getRandomValues(array)
+  const code = 1000 + (array[0] % 9000)
+  return code.toString()
+}
+
+/**
  * Get cookie options for setting the website access_token cookie
  */
 export function getWebsiteAuthCookieOptions(isHttps: boolean = false) {
@@ -42,3 +52,4 @@ export function getWebsiteAuthCookieOptions(isHttps: boolean = false) {
     maxAge: WEBSITE_SESSION_MAX_AGE_SECONDS,
   }
 }
+

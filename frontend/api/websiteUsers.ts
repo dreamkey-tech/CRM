@@ -42,6 +42,7 @@ export async function getWebsiteUsersList(
   if (params.search?.trim()) cleanParams.search = params.search.trim()
   if (params.status) cleanParams.status = params.status
   if (params.authProvider) cleanParams.authProvider = params.authProvider
+  if (params.hasClickedProperty) cleanParams.hasClickedProperty = params.hasClickedProperty
   if (params.sortBy) cleanParams.sortBy = params.sortBy
   if (params.sortOrder) cleanParams.sortOrder = params.sortOrder
 

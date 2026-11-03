@@ -37,6 +37,35 @@ function getSessionCookieOptions(c: Context<AppEnv>) {
  * 1. Initiate Google Login
  * Endpoint: POST /api/auth/sign-in/social
  */
+function isAllowedRedirectUrl(urlStr: string, c: Context<AppEnv>): boolean {
+  try {
+    const parsed = new URL(urlStr)
+    const hostname = parsed.hostname.toLowerCase()
+
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return true
+    }
+
+    if (c.env?.FRONTEND_URL) {
+      try {
+        const frontendHost = new URL(c.env.FRONTEND_URL).hostname.toLowerCase()
+        if (hostname === frontendHost) return true
+      } catch {}
+    }
+
+    const allowedHosts = [
+      'dreamkeykol.com',
+      'www.dreamkeykol.com',
+      'admin.dreamkeykol.com',
+      'dreamkey-crm.pages.dev',
+    ]
+    if (allowedHosts.includes(hostname) || hostname.endsWith('.dreamkey-crm.pages.dev')) {
+      return true
+    }
+  } catch {}
+  return false
+}
+
 export const oauthSignInSocialController = async (c: Context<AppEnv>) => {
   const body = await c.req.json<{
     provider: string
@@ -54,6 +83,15 @@ export const oauthSignInSocialController = async (c: Context<AppEnv>) => {
     return c.json({ error: 'Only google provider is currently supported.' }, 400)
   }
 
+  // Validate callbackURL against trusted domain allowlist to prevent Open Redirect
+  const defaultCallback = c.env?.FRONTEND_URL ? `${c.env.FRONTEND_URL}/dashboard` : 'http://localhost:3000/dashboard'
+  const defaultErrorCallback = c.env?.FRONTEND_URL ? `${c.env.FRONTEND_URL}/login` : 'http://localhost:3000/login'
+
+  const safeCallbackURL = isAllowedRedirectUrl(body.callbackURL, c) ? body.callbackURL : defaultCallback
+  const safeErrorCallbackURL = body.errorCallbackURL && isAllowedRedirectUrl(body.errorCallbackURL, c)
+    ? body.errorCallbackURL
+    : defaultErrorCallback
+
   const clientId = c.env.GOOGLE_CLIENT_ID
   if (!clientId) {
     return c.json(
@@ -65,12 +103,9 @@ export const oauthSignInSocialController = async (c: Context<AppEnv>) => {
   const backendUrl = getBackendOrigin(c)
 
   // Determine redirect URI:
-  // 1. Explicit redirectURI provided in request body
-  // 2. Or dynamically from callbackURL origin if routed through Next.js proxy (/api-proxy/...)
-  // 3. Or default backend callback
   let redirectUri = body.redirectURI
   if (!redirectUri) {
-    const callbackTarget = body.callbackURL || ''
+    const callbackTarget = safeCallbackURL
     try {
       if (callbackTarget.startsWith('http://') || callbackTarget.startsWith('https://')) {
         const targetOrigin = new URL(callbackTarget).origin
@@ -86,8 +121,8 @@ export const oauthSignInSocialController = async (c: Context<AppEnv>) => {
   // State parameter to prevent CSRF, remember redirect target and redirectUri
   const stateData = {
     csrf: crypto.randomUUID(),
-    callbackURL: body.callbackURL || 'http://localhost:3000/dashboard',
-    errorCallbackURL: body.errorCallbackURL || 'http://localhost:3000/login',
+    callbackURL: safeCallbackURL,
+    errorCallbackURL: safeErrorCallbackURL,
     redirectURI: redirectUri,
   }
   const stateString = btoa(JSON.stringify(stateData))
@@ -127,16 +162,20 @@ export const oauthGoogleCallbackController = async (c: Context<AppEnv>) => {
   const state = c.req.query('state')
   const storedState = getCookie(c, OAUTH_STATE_COOKIE)
 
-  let callbackURL = 'http://localhost:3000/dashboard'
-  let errorCallbackURL = 'http://localhost:3000/login'
+  let callbackURL = c.env?.FRONTEND_URL ? `${c.env.FRONTEND_URL}/dashboard` : 'http://localhost:3000/dashboard'
+  let errorCallbackURL = c.env?.FRONTEND_URL ? `${c.env.FRONTEND_URL}/login` : 'http://localhost:3000/login'
   const backendUrl = getBackendOrigin(c)
   let redirectUri = `${backendUrl}/api/auth/callback/google`
 
   try {
     if (state) {
       const parsed = JSON.parse(atob(state))
-      callbackURL = parsed.callbackURL || callbackURL
-      errorCallbackURL = parsed.errorCallbackURL || errorCallbackURL
+      if (parsed.callbackURL && isAllowedRedirectUrl(parsed.callbackURL, c)) {
+        callbackURL = parsed.callbackURL
+      }
+      if (parsed.errorCallbackURL && isAllowedRedirectUrl(parsed.errorCallbackURL, c)) {
+        errorCallbackURL = parsed.errorCallbackURL
+      }
       if (parsed.redirectURI) {
         redirectUri = parsed.redirectURI
       }
@@ -145,17 +184,18 @@ export const oauthGoogleCallbackController = async (c: Context<AppEnv>) => {
     console.error('Failed to parse OAuth state:', e)
   }
 
+  // Clear state cookie
+  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
+
   if (!code || !state) {
     return c.redirect(`${errorCallbackURL}?error=invalid_request`)
   }
 
-  // If storedState is present in cookie, verify it matches
-  if (storedState && state !== storedState) {
-    console.warn('OAuth state mismatch warning')
+  // Enforce strict CSRF state validation - reject if mismatch or missing
+  if (!storedState || state !== storedState) {
+    console.error('OAuth state CSRF validation failed')
+    return c.redirect(`${errorCallbackURL}?error=csrf_validation_failed`)
   }
-
-  // Clear state cookie
-  deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' })
 
   const clientId = c.env.GOOGLE_CLIENT_ID
   const clientSecret = c.env.GOOGLE_CLIENT_SECRET
@@ -266,11 +306,14 @@ export const oauthGoogleCallbackController = async (c: Context<AppEnv>) => {
   setCookie(c, BETTER_AUTH_COOKIE_NAME, sessionToken, cookieOpts)
   setCookie(c, 'access_token', sessionToken, cookieOpts)
 
-  // Attach token query param so cross-domain frontends (e.g. localhost:3000 with Cloudflare Workers) receive the session
+  // Only attach token query param for local development (cross-port testing without shared cookies)
   try {
     const redirectUrl = new URL(callbackURL)
-    redirectUrl.searchParams.set('token', sessionToken)
-    return c.redirect(redirectUrl.toString())
+    if (redirectUrl.hostname === 'localhost' || redirectUrl.hostname === '127.0.0.1') {
+      redirectUrl.searchParams.set('token', sessionToken)
+      return c.redirect(redirectUrl.toString())
+    }
+    return c.redirect(callbackURL)
   } catch {
     return c.redirect(callbackURL)
   }

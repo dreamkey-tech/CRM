@@ -42,3 +42,22 @@ export interface PasswordResetEmailData {
   portalName?: string
   from?: string
 }
+
+export interface WebsiteLoginOtpEmailData {
+  to: string
+  name?: string | null
+  email: string
+  otp: string
+  expiresInMinutes?: number
+  from?: string
+}
+
+export interface WebsiteResetPasswordOtpEmailData {
+  to: string
+  name?: string | null
+  email: string
+  otp: string
+  expiresInMinutes?: number
+  from?: string
+}
+

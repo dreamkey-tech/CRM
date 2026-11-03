@@ -32,6 +32,8 @@ export interface WebsiteUser {
   createdAt: string
   updatedAt: string
   totalSessions: number
+  totalPropertyClicks?: number
+  hasClickedProperty?: boolean
 }
 
 // ── Pagination ────────────────────────────────────────────────────────────────
@@ -60,8 +62,31 @@ export interface WebsiteUserSession {
   expiresAt: string
 }
 
+export interface WebsitePropertyClickItem {
+  id: string
+  propertyId: string
+  createdAt: string
+  ipAddress: string | null
+  userAgent: string | null
+  property: {
+    id: string
+    societyBuildingName: string
+    locationArea: string
+    city: string
+    propertyType: string
+    askingPrice: number
+    pricingType: string
+    bedrooms?: number | null
+    carpetAreaSqFt?: number | null
+    showInWebsite: boolean
+    coverImage?: string | null
+  }
+}
+
 export interface WebsiteUserDetail extends WebsiteUser {
   recentSessions: WebsiteUserSession[]
+  propertyClicks: WebsitePropertyClickItem[]
+  totalPropertyClicks: number
 }
 
 export interface WebsiteUserDetailResponse {
@@ -88,6 +113,7 @@ export interface WebsiteUsersListParams {
   search?: string
   status?: 'active' | 'inactive' | ''
   authProvider?: string
+  hasClickedProperty?: 'true' | 'false' | 'all' | ''
   sortBy?: 'createdAt' | 'updatedAt' | 'lastLoginAt' | 'lastActiveAt' | 'loginCount' | 'name' | 'email' | 'authProvider' | 'emailVerified'
   sortOrder?: 'asc' | 'desc'
 }

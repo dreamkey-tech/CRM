@@ -19,21 +19,24 @@ export const adminWebsiteUserRoutes = new Hono<AppEnv>()
  * Base path mounted at: /v1/admin/website-users
  */
 
+// All admin website user and enquiry management endpoints require authentication
+adminWebsiteUserRoutes.use('*', authMiddleware)
+
 // Analytics & Stats for CRM Dashboard
-adminWebsiteUserRoutes.get('/stats', getWebsiteUserStatsController)
+adminWebsiteUserRoutes.get('/stats', requirePermission('employees:read'), getWebsiteUserStatsController)
 
 // Website Enquiries Management Routes
-adminWebsiteUserRoutes.get('/enquiries/stats', getWebsiteEnquiryStatsController)
-adminWebsiteUserRoutes.get('/enquiries', getWebsiteEnquiriesListController)
-adminWebsiteUserRoutes.patch('/enquiries/:id/status', updateWebsiteEnquiryStatusController)
-adminWebsiteUserRoutes.delete('/enquiries/:id', deleteWebsiteEnquiryController)
+adminWebsiteUserRoutes.get('/enquiries/stats', requirePermission('clients:read'), getWebsiteEnquiryStatsController)
+adminWebsiteUserRoutes.get('/enquiries', requirePermission('clients:read'), getWebsiteEnquiriesListController)
+adminWebsiteUserRoutes.patch('/enquiries/:id/status', requirePermission('clients:update'), updateWebsiteEnquiryStatusController)
+adminWebsiteUserRoutes.delete('/enquiries/:id', requirePermission('clients:delete'), deleteWebsiteEnquiryController)
 
 // List website users with search, pagination, filters
-adminWebsiteUserRoutes.get('/', getWebsiteUsersListController)
+adminWebsiteUserRoutes.get('/', requirePermission('employees:read'), getWebsiteUsersListController)
 
 // Get website user profile & session history
-adminWebsiteUserRoutes.get('/:id', getWebsiteUserDetailController)
+adminWebsiteUserRoutes.get('/:id', requirePermission('employees:read'), getWebsiteUserDetailController)
 
 // Update user status (active / deactive)
-adminWebsiteUserRoutes.patch('/:id/status', updateWebsiteUserStatusController)
+adminWebsiteUserRoutes.patch('/:id/status', requirePermission('employees:manage'), updateWebsiteUserStatusController)
 

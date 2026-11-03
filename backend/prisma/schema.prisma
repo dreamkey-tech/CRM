@@ -114,6 +114,7 @@ model WebsiteUser {
   updatedAt        DateTime             @updatedAt
 
   sessions         WebsiteUserSession[]
+  propertyClicks   WebsitePropertyClick[]
 
   @@index([googleId])
   @@map("website_users")
@@ -133,6 +134,21 @@ model WebsiteUserSession {
 
   @@index([userId])
   @@map("website_user_sessions")
+}
+
+model WebsiteUserOtp {
+  id        String   @id @default(uuid())
+  email     String
+  otp       String
+  purpose   String   // "LOGIN" | "PASSWORD_RESET"
+  attempts  Int      @default(0)
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([email, purpose])
+  @@index([expiresAt])
+  @@map("website_user_otps")
 }
 
 model WebsiteEnquiry {
@@ -437,6 +453,7 @@ model Property {
   id                   String                @id @default(uuid())
   isDraft              Boolean               @default(false)
   isArchived           Boolean               @default(false)
+  showInWebsite        Boolean               @default(false)
   archivedAt           DateTime?
 
   // Mandatory listing fields
@@ -483,6 +500,7 @@ model Property {
   media                PropertyMedia[]
   auditLogs            PropertyAuditLog[]
   clientShortlists     ClientShortlistedProperty[]
+  websiteClicks        WebsitePropertyClick[]
 
   @@index([propertyType])
   @@index([availabilityStatus])
@@ -493,6 +511,7 @@ model Property {
   @@index([pincode])
   @@index([isDraft])
   @@index([isArchived])
+  @@index([showInWebsite])
   @@map("properties")
 }
 
@@ -574,5 +593,22 @@ model AuditLog {
   @@index([action])
   @@index([createdAt])
   @@map("audit_logs")
+}
+
+model WebsitePropertyClick {
+  id         String      @id @default(uuid())
+  userId     String
+  propertyId String
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  user       WebsiteUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+  property   Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([propertyId])
+  @@index([createdAt])
+  @@map("website_property_clicks")
 }
 

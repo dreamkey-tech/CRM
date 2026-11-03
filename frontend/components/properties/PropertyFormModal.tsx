@@ -25,6 +25,7 @@ import {
   Minimize2,
   AlertCircle,
   Calendar,
+  Globe,
 } from 'lucide-react'
 import { propertyFormSchema, type PropertyFormValues } from '../../zod/property'
 import { createPropertyDraft, updateProperty, getPropertyById, deleteProperty, deletePropertyMedia, reorderPropertyMedia } from '../../api/properties'
@@ -149,7 +150,7 @@ export function PropertyFormModal({
 
   // ── React Hook Form with Zod Resolver ──────────────────────────────────────
   const form = useForm<PropertyFormValues>({
-    resolver: zodResolver(propertyFormSchema),
+    resolver: zodResolver(propertyFormSchema) as any,
     defaultValues: {
       propertyType: 'FLAT',
       pricingType: 'SALE',
@@ -175,6 +176,7 @@ export function PropertyFormModal({
       totalUnits: '',
       amenities: ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
       reraNumber: '',
+      showInWebsite: false,
       notes: '',
     },
     mode: 'onTouched',
@@ -199,6 +201,7 @@ export function PropertyFormModal({
   const watchedBalconies = watch('balconies')
   const watchedAmenities = watch('amenities') || []
   const watchedAskingPrice = watch('askingPrice')
+  const watchedShowInWebsite = watch('showInWebsite')
 
   // ── Initialize or Restore Draft on Open ────────────────────────────────────
   useEffect(() => {
@@ -240,6 +243,7 @@ export function PropertyFormModal({
         totalUnits: initialProperty.totalUnits ? String(initialProperty.totalUnits) : '',
         amenities: initialProperty.amenities || ['Parking', 'High Speed Elevators'],
         reraNumber: initialProperty.reraNumber || '',
+        showInWebsite: initialProperty.showInWebsite ?? false,
         notes: initialProperty.notes || '',
       })
       setPrefilledSociety(null)
@@ -277,6 +281,7 @@ export function PropertyFormModal({
           ? initialSociety.amenities
           : ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
         reraNumber: initialSociety.reraNumber || '',
+        showInWebsite: false,
         notes: '',
       })
     } else {
@@ -324,6 +329,7 @@ export function PropertyFormModal({
             totalUnits: parsed.totalUnits || '',
             amenities: parsed.amenities || ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
             reraNumber: parsed.reraNumber || '',
+            showInWebsite: Boolean(parsed.showInWebsite),
             notes: parsed.notes || '',
           })
         } catch {
@@ -356,6 +362,7 @@ export function PropertyFormModal({
           totalUnits: '',
           amenities: ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
           reraNumber: '',
+          showInWebsite: false,
           notes: '',
         })
         setUploadedMedia([])
@@ -433,6 +440,7 @@ export function PropertyFormModal({
       totalUnits: '',
       amenities: ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
       reraNumber: '',
+      showInWebsite: false,
       notes: '',
     })
     toast.info('Draft Cleared', 'All fields reset to blank template.')
@@ -620,6 +628,7 @@ export function PropertyFormModal({
       totalUnits: data.totalUnits ? parseInt(data.totalUnits, 10) : null,
       amenities: data.amenities || [],
       reraNumber: data.reraNumber?.trim() || null,
+      showInWebsite: Boolean(data.showInWebsite),
       notes: data.notes?.trim() || null,
       isDraft: false,
     }
@@ -684,6 +693,7 @@ export function PropertyFormModal({
         totalUnits: data.totalUnits ? parseInt(data.totalUnits, 10) : null,
         amenities: data.amenities || [],
         reraNumber: data.reraNumber?.trim() || null,
+        showInWebsite: Boolean(data.showInWebsite),
         notes: data.notes?.trim() || null,
         isDraft: false,
       }
@@ -745,6 +755,7 @@ export function PropertyFormModal({
           totalUnits: data.totalUnits || '',
           amenities: data.amenities || ['Parking', 'High Speed Elevators', '24x7 Security & CCTV'],
           reraNumber: data.reraNumber || '',
+          showInWebsite: Boolean(data.showInWebsite),
           notes: '',
         })
 
@@ -1283,7 +1294,56 @@ export function PropertyFormModal({
                 </div>
               </div>
 
-              {/* Row 7: Access Type & Broker Selection */}
+              {/* Row 7: Show on Website Toggle Card */}
+              <div className="border border-border p-4 bg-surface-secondary/40 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-9 h-9 rounded-xs flex items-center justify-center border transition-colors ${
+                      watchedShowInWebsite
+                        ? 'bg-gold/20 border-gold/40 text-gold'
+                        : 'bg-surface border-border text-muted-text'
+                    }`}
+                  >
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-foreground">
+                        Show on Website
+                      </span>
+                      {watchedShowInWebsite ? (
+                        <span className="text-[8px] font-black uppercase px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-mono">
+                          Public Listing Active
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 bg-surface border border-border text-muted-text font-mono">
+                          Internal CRM Only
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-text">
+                      Publish this property to the public DreamKey website (<code>/website/properties/list</code>).
+                    </p>
+                  </div>
+                </div>
+
+                <label className="relative inline-flex items-center cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(watchedShowInWebsite)}
+                    onChange={(e) =>
+                      setValue('showInWebsite', e.target.checked, {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      })
+                    }
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-surface-secondary peer-focus:outline-hidden border border-border rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-gold peer-checked:border-gold"></div>
+                </label>
+              </div>
+
+              {/* Row 8: Access Type & Broker Selection */}
               <div className="border border-border p-4 bg-surface-secondary/40 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>

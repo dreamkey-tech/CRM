@@ -5,9 +5,14 @@ import type {
   SendEmailResult,
   EmployeeWelcomeEmailData,
   PasswordResetEmailData,
+  WebsiteLoginOtpEmailData,
+  WebsiteResetPasswordOtpEmailData,
 } from './types'
+import { EMAIL_SENDERS } from './types'
 import { renderEmployeeWelcomeEmail } from './templates/employeeWelcome'
 import { renderPasswordResetEmail } from './templates/passwordReset'
+import { renderWebsiteLoginOtpEmail } from './templates/websiteLoginOtp'
+import { renderWebsiteResetPasswordOtpEmail } from './templates/websiteResetPasswordOtp'
 
 /**
  * Returns a configured Resend SDK instance if RESEND_API_KEY is present
@@ -139,3 +144,50 @@ export async function sendPasswordResetEmail(
     env
   )
 }
+
+/**
+ * Dispatches the 4-digit OTP email for website user login verification
+ * Sender default: info@dreamkeykol.com
+ */
+export async function sendWebsiteLoginOtpEmail(
+  data: WebsiteLoginOtpEmailData,
+  env?: Bindings
+): Promise<SendEmailResult> {
+  const { subject, html, text } = renderWebsiteLoginOtpEmail(data)
+  const from = data.from || 'DreamKey <info@dreamkeykol.com>'
+  return sendEmail(
+    {
+      to: data.to,
+      from,
+      subject,
+      html,
+      text,
+      tags: [{ name: 'category', value: 'website_login_otp' }],
+    },
+    env
+  )
+}
+
+/**
+ * Dispatches the 4-digit OTP email for website user password reset
+ * Sender default: info@dreamkeykol.com
+ */
+export async function sendWebsiteResetPasswordOtpEmail(
+  data: WebsiteResetPasswordOtpEmailData,
+  env?: Bindings
+): Promise<SendEmailResult> {
+  const { subject, html, text } = renderWebsiteResetPasswordOtpEmail(data)
+  const from = data.from || 'DreamKey <info@dreamkeykol.com>'
+  return sendEmail(
+    {
+      to: data.to,
+      from,
+      subject,
+      html,
+      text,
+      tags: [{ name: 'category', value: 'website_reset_password_otp' }],
+    },
+    env
+  )
+}
+

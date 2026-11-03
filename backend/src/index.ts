@@ -11,6 +11,7 @@ import { brokerRoutes } from './routes/broker'
 import { ownerRoutes } from './routes/owner'
 import { clientRoutes, publicClientShareRoutes } from './routes/client'
 import { propertyRoutes } from './routes/property'
+import { websitePropertyRoutes } from './routes/website-property'
 import { employeeRoutes } from './routes/employee'
 import { auditRoutes } from './routes/audit'
 import { authMiddleware, requirePermission } from './middleware/auth'
@@ -24,16 +25,53 @@ import { zodValidationHook } from './lib/validator'
 
 const app = new Hono<AppEnv>()
 
-// 1. Configure CORS to allow frontend with cookies
+// 1. Global Security Headers Middleware
+app.use('*', async (c, next) => {
+  await next()
+  c.header('X-Content-Type-Options', 'nosniff')
+  c.header('X-Frame-Options', 'DENY')
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin')
+  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
+})
+
+// 2. Configure strict CORS to only allow trusted frontend origins with credentials
 app.use(
   '*',
   cors({
-    origin: (origin) => {
-      // Allow localhost in development or specific domain in production
-      if (!origin || origin.includes('localhost') || origin.includes('127.0.0.1')) {
-        return origin || 'http://localhost:3000'
-      }
-      return origin
+    origin: (origin, c) => {
+      if (!origin) return 'http://localhost:3000'
+
+      try {
+        const parsed = new URL(origin)
+        const hostname = parsed.hostname.toLowerCase()
+
+        // Allow localhost and loopback for local development
+        if (hostname === 'localhost' || hostname === '127.0.0.1') {
+          return origin
+        }
+
+        // Allow explicitly configured FRONTEND_URL
+        if (c.env?.FRONTEND_URL) {
+          try {
+            const frontendHost = new URL(c.env.FRONTEND_URL).hostname.toLowerCase()
+            if (hostname === frontendHost) return origin
+          } catch {}
+        }
+
+        // Allow official DreamKey domains and Cloudflare Pages deployments
+        const allowedHosts = [
+          'dreamkeykol.com',
+          'www.dreamkeykol.com',
+          'admin.dreamkeykol.com',
+          'dreamkey-crm.pages.dev',
+        ]
+        if (allowedHosts.includes(hostname) || hostname.endsWith('.dreamkey-crm.pages.dev')) {
+          return origin
+        }
+      } catch {}
+
+      // Reject untrusted cross-origin requests
+      return null
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -41,7 +79,7 @@ app.use(
   })
 )
 
-// 2. Attach request-scoped Prisma client
+// 3. Attach request-scoped Prisma client
 app.use('*', prismaMiddleware)
 
 // 3. Public Website Enquiry Endpoints
@@ -64,6 +102,8 @@ app.route('/v1/admin', roleRoutes)
 app.route('/v1/user', userRoutes)
 app.route('/v1/brokers', brokerRoutes)
 app.route('/v1/properties', propertyRoutes)
+app.route('/v1/website/properties', websitePropertyRoutes)
+app.route('/website/properties', websitePropertyRoutes)
 app.route('/v1/owners', ownerRoutes)
 app.route('/v1/clients', clientRoutes)
 app.route('/v1/public/property-shares', publicClientShareRoutes)

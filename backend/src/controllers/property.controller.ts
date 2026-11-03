@@ -165,6 +165,7 @@ export async function createPropertyDraftController(c: Context<AppEnv>) {
         accessType: body.accessType || 'DIRECT',
         brokerId: body.accessType === 'BROKER' ? body.brokerId || null : null,
         ownerId: body.accessType !== 'BROKER' ? body.ownerId || null : null,
+        showInWebsite: body.showInWebsite ?? false,
         notes: body.notes || null,
       },
     })
@@ -288,6 +289,7 @@ export async function createPropertyController(c: Context<AppEnv>) {
         accessType: body.accessType,
         brokerId: body.accessType === 'BROKER' ? body.brokerId ?? null : null,
         ownerId: body.accessType !== 'BROKER' ? body.ownerId ?? null : null,
+        showInWebsite: body.showInWebsite ?? false,
         builderName: body.builderName ?? null,
         yearOfConstruction: body.yearOfConstruction ?? null,
         totalUnits: body.totalUnits ?? null,
@@ -390,6 +392,7 @@ export async function listPropertiesController(c: Context<AppEnv>) {
     maxBedrooms,
     isDraft,
     isArchived,
+    showInWebsite,
     sortBy = 'createdAt',
     sortOrder = 'desc',
   } = query
@@ -404,6 +407,9 @@ export async function listPropertiesController(c: Context<AppEnv>) {
   }
   if (isDraft !== undefined) {
     whereConditions.push({ isDraft })
+  }
+  if (showInWebsite !== undefined) {
+    whereConditions.push({ showInWebsite })
   }
 
   // FR-SF-01: Filter by Property Type (supports comma-separated list e.g. "FLAT,COMMERCIAL,OTHER")
@@ -798,6 +804,7 @@ export async function updatePropertyController(c: Context<AppEnv>) {
               : null
             : existing.availabilityDate,
         accessType: body.accessType ?? existing.accessType,
+        showInWebsite: body.showInWebsite !== undefined ? body.showInWebsite : existing.showInWebsite,
         brokerId: (body.accessType ?? existing.accessType) === 'BROKER'
           ? body.brokerId !== undefined ? body.brokerId : existing.brokerId : null,
         ownerId: (body.accessType ?? existing.accessType) === 'DIRECT'

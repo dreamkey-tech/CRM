@@ -32,13 +32,13 @@ export function generateSessionToken(): string {
 /**
  * Get cookie options for setting the auth session
  */
-export function getAuthCookieOptions(isProduction: boolean = false) {
+export function getAuthCookieOptions(isHttps: boolean = false) {
   return {
     name: AUTH_COOKIE_NAME,
     path: '/',
     httpOnly: true,
-    secure: isProduction, // Set to true on HTTPS
-    sameSite: isProduction ? ('None' as const) : ('Lax' as const),
+    secure: isHttps, // Set to true on HTTPS
+    sameSite: isHttps ? ('None' as const) : ('Lax' as const),
     maxAge: SESSION_MAX_AGE_SECONDS,
   }
 }

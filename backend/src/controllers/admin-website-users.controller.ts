@@ -1,5 +1,6 @@
 import type { Context } from 'hono'
 import type { AppEnv } from '../db'
+import { logAudit } from '../lib/audit'
 
 /**
  * Get website user analytics and metrics for CRM Dashboard
@@ -73,6 +74,7 @@ export const getWebsiteUsersListController = async (c: Context<AppEnv>) => {
   const search = c.req.query('search')?.trim()
   const status = c.req.query('status')
   const authProvider = c.req.query('authProvider')
+  const hasClickedProperty = c.req.query('hasClickedProperty')
   const sortBy = c.req.query('sortBy') || 'createdAt'
   const sortOrder = c.req.query('sortOrder') === 'asc' ? 'asc' : 'desc'
 
@@ -90,6 +92,12 @@ export const getWebsiteUsersListController = async (c: Context<AppEnv>) => {
     whereClause.isActive = true
   } else if (status === 'inactive') {
     whereClause.isActive = false
+  }
+
+  if (hasClickedProperty === 'true') {
+    whereClause.propertyClicks = { some: {} }
+  } else if (hasClickedProperty === 'false') {
+    whereClause.propertyClicks = { none: {} }
   }
 
   if (authProvider) {
@@ -131,7 +139,7 @@ export const getWebsiteUsersListController = async (c: Context<AppEnv>) => {
         createdAt: true,
         updatedAt: true,
         _count: {
-          select: { sessions: true },
+          select: { sessions: true, propertyClicks: true },
         },
       },
     }),
@@ -155,6 +163,8 @@ export const getWebsiteUsersListController = async (c: Context<AppEnv>) => {
     createdAt: u.createdAt,
     updatedAt: u.updatedAt,
     totalSessions: u._count.sessions,
+    totalPropertyClicks: u._count.propertyClicks,
+    hasClickedProperty: u._count.propertyClicks > 0,
   }))
 
   return c.json({
@@ -194,6 +204,32 @@ export const getWebsiteUserDetailController = async (c: Context<AppEnv>) => {
           expiresAt: true,
         },
       },
+      propertyClicks: {
+        orderBy: { createdAt: 'desc' },
+        take: 50,
+        include: {
+          property: {
+            select: {
+              id: true,
+              societyBuildingName: true,
+              locationArea: true,
+              city: true,
+              propertyType: true,
+              askingPrice: true,
+              pricingType: true,
+              bedrooms: true,
+              carpetAreaSqFt: true,
+              showInWebsite: true,
+              media: {
+                where: { category: 'PHOTOGRAPH' },
+                orderBy: [{ isCover: 'desc' }, { order: 'asc' }],
+                take: 1,
+                select: { url: true },
+              },
+            },
+          },
+        },
+      },
     },
   })
 
@@ -226,6 +262,28 @@ export const getWebsiteUserDetailController = async (c: Context<AppEnv>) => {
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       recentSessions: user.sessions,
+      propertyClicks: (user.propertyClicks || []).map((click) => ({
+        id: click.id,
+        propertyId: click.propertyId,
+        createdAt: click.createdAt,
+        ipAddress: click.ipAddress,
+        userAgent: click.userAgent,
+        property: {
+          id: click.property.id,
+          societyBuildingName: click.property.societyBuildingName,
+          locationArea: click.property.locationArea,
+          city: click.property.city,
+          propertyType: click.property.propertyType,
+          askingPrice: click.property.askingPrice,
+          pricingType: click.property.pricingType,
+          bedrooms: click.property.bedrooms,
+          carpetAreaSqFt: click.property.carpetAreaSqFt,
+          showInWebsite: click.property.showInWebsite,
+          coverImage: click.property.media[0]?.url || null,
+        },
+      })),
+      totalPropertyClicks: user.propertyClicks?.length || 0,
+      hasClickedProperty: (user.propertyClicks?.length || 0) > 0,
     },
   })
 }
@@ -273,6 +331,15 @@ export const updateWebsiteUserStatusController = async (c: Context<AppEnv>) => {
       where: { userId: id },
     })
   }
+
+  await logAudit(c, {
+    action: 'UPDATE_WEBSITE_USER_STATUS',
+    module: 'WEBSITE_USERS',
+    resourceId: updated.id,
+    resourceName: updated.email,
+    details: `Website user ${updated.email} marked as ${updated.isActive ? 'ACTIVE' : 'DEACTIVATED'}`,
+    status: 'SUCCESS',
+  })
 
   return c.json({
     success: true,
@@ -463,6 +530,15 @@ export const updateWebsiteEnquiryStatusController = async (c: Context<AppEnv>) =
     data: updateData,
   })
 
+  await logAudit(c, {
+    action: 'UPDATE_WEBSITE_ENQUIRY',
+    module: 'ENQUIRIES',
+    resourceId: updated.id,
+    resourceName: updated.fullName,
+    details: `Updated enquiry for ${updated.fullName} (Status: ${updated.status})`,
+    status: 'SUCCESS',
+  })
+
   return c.json({
     success: true,
     message: 'Enquiry updated successfully',
@@ -491,6 +567,15 @@ export const deleteWebsiteEnquiryController = async (c: Context<AppEnv>) => {
   }
 
   await prisma.websiteEnquiry.delete({ where: { id } })
+
+  await logAudit(c, {
+    action: 'DELETE_WEBSITE_ENQUIRY',
+    module: 'ENQUIRIES',
+    resourceId: existing.id,
+    resourceName: existing.fullName,
+    details: `Deleted enquiry for ${existing.fullName} (${existing.email})`,
+    status: 'SUCCESS',
+  })
 
   return c.json({
     success: true,

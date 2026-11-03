@@ -122,6 +122,7 @@ export const generateUploadUrlsSchema = z.object({
 
 export const createPropertyBaseSchema = z.object({
   isDraft: z.boolean().default(false),
+  showInWebsite: z.boolean().default(false),
 
   // Mandatory Listing Fields
   propertyType: propertyTypeSchema.default('FLAT'),
@@ -217,6 +218,7 @@ export const createPropertyDraftSchema = z.object({
   accessType: propertyAccessTypeSchema.optional().default('DIRECT'),
   brokerId: z.string().uuid().optional().nullable(),
   ownerId: z.string().uuid().optional().nullable(),
+  showInWebsite: z.boolean().optional().default(false),
   notes: z.string().max(2000).optional().nullable(),
   media: z.array(propertyMediaItemSchema).optional().default([]),
 }).superRefine((data, ctx) => {
@@ -235,6 +237,7 @@ export const attachPropertyMediaSchema = z.object({
 
 export const updatePropertySchema = createPropertyBaseSchema.extend({
   isDraft: createPropertyBaseSchema.shape.isDraft.removeDefault(),
+  showInWebsite: createPropertyBaseSchema.shape.showInWebsite.removeDefault(),
   propertyType: createPropertyBaseSchema.shape.propertyType.removeDefault(),
   city: createPropertyBaseSchema.shape.city.removeDefault(),
   pricingType: createPropertyBaseSchema.shape.pricingType.removeDefault(),
@@ -339,6 +342,15 @@ export const propertyFilterQuerySchema = z.object({
       if (val === 'true') return true
       if (val === 'false') return false
       return false // default: exclude archived
+    }),
+
+  showInWebsite: z
+    .enum(['true', 'false', 'all'])
+    .optional()
+    .transform((val) => {
+      if (val === 'true') return true
+      if (val === 'false') return false
+      return undefined
     }),
 
   // Sorting

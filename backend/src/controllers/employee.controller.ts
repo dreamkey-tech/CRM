@@ -274,6 +274,21 @@ export const createEmployeeController = async (c: Context<AppEnv>) => {
     permissionNames = ['properties:read', 'clients:read', 'brokers:read', 'owners:read']
   }
 
+  // Prevent privilege escalation: Only Super Admins can assign the SUPER_ADMIN role or grant wildcard *:*
+  const callerPerms = c.get('permissions') || []
+  const isCallerSuperAdmin = callerPerms.includes('*:*')
+
+  if ((permissionNames.includes('*:*') || body.roleName === 'SUPER_ADMIN') && !isCallerSuperAdmin) {
+    return c.json(
+      {
+        success: false,
+        error: 'Only Super Administrators can assign the SUPER_ADMIN role or grant wildcard permissions.',
+        code: 'SUPER_ADMIN_REQUIRED',
+      },
+      403
+    )
+  }
+
   // Create user
   const user = await prisma.user.create({
     data: {
@@ -396,6 +411,35 @@ export const updateEmployeeController = async (c: Context<AppEnv>) => {
     return c.json({ success: false, error: 'Employee not found.', code: 'NOT_FOUND' }, 404)
   }
 
+  const currentUser = c.get('user')
+  const callerPerms = c.get('permissions') || []
+  const isCallerSuperAdmin = callerPerms.includes('*:*')
+
+  // Prevent modifying protected Super Admin accounts unless caller is Super Admin
+  const isTargetSuperAdmin = user.roles.some((r) => r.role.name === 'SUPER_ADMIN')
+  if (isTargetSuperAdmin && !isCallerSuperAdmin) {
+    return c.json(
+      {
+        success: false,
+        error: 'Super Admin accounts are protected and can only be modified by a Super Admin.',
+        code: 'SUPER_ADMIN_PROTECTED',
+      },
+      403
+    )
+  }
+
+  // Prevent non-Super Admins from altering their own administrative permissions
+  if (currentUser?.id === id && (body.customPermissions || body.roleName || body.moduleAccess) && !isCallerSuperAdmin) {
+    return c.json(
+      {
+        success: false,
+        error: 'You cannot alter your own administrative permissions.',
+        code: 'SELF_MODIFICATION_FORBIDDEN',
+      },
+      403
+    )
+  }
+
   // Update name / isActive
   await prisma.user.update({
     where: { id },
@@ -420,6 +464,18 @@ export const updateEmployeeController = async (c: Context<AppEnv>) => {
       if (templateRole) {
         permissionNames = templateRole.permissions.map((p) => p.permission.name)
       }
+    }
+
+    // Only Super Admins can assign the SUPER_ADMIN role or grant wildcard *:*
+    if ((permissionNames.includes('*:*') || body.roleName === 'SUPER_ADMIN') && !isCallerSuperAdmin) {
+      return c.json(
+        {
+          success: false,
+          error: 'Only Super Administrators can assign the SUPER_ADMIN role or grant wildcard permissions.',
+          code: 'SUPER_ADMIN_REQUIRED',
+        },
+        403
+      )
     }
 
     // Upsert a custom role for this user or modify existing custom role
@@ -484,9 +540,32 @@ export const resetEmployeePasswordController = async (c: Context<AppEnv>) => {
   const id = c.req.param('id')
   const body = c.req.valid('json' as never) as ResetEmployeePasswordInput
 
-  const user = await prisma.user.findUnique({ where: { id } })
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      roles: {
+        include: { role: true },
+      },
+    },
+  })
   if (!user) {
     return c.json({ success: false, error: 'Employee not found.', code: 'NOT_FOUND' }, 404)
+  }
+
+  // Prevent resetting password of Super Admins by non-Super Admins
+  const callerPerms = c.get('permissions') || []
+  const isCallerSuperAdmin = callerPerms.includes('*:*')
+  const isTargetSuperAdmin = user.roles.some((r) => r.role.name === 'SUPER_ADMIN')
+
+  if (isTargetSuperAdmin && !isCallerSuperAdmin) {
+    return c.json(
+      {
+        success: false,
+        error: 'Super Admin account passwords can only be reset by a Super Admin.',
+        code: 'SUPER_ADMIN_PROTECTED',
+      },
+      403
+    )
   }
 
   const passwordHash = await hashPassword(body.password)

@@ -54,6 +54,7 @@ export const openApiSpec = {
     { name: 'Leads', description: 'CRM Lead management' },
     { name: 'OAuth & Social Auth', description: 'Google OAuth / Better Auth login flow' },
     { name: 'Website Enquiries', description: 'Public property enquiry submission endpoints' },
+    { name: 'Website Properties', description: 'Public property listing, customer click tracking, and authenticated safe property details for the DreamKey website' },
   ],
   paths: {
     '/v1/website/enquiry': {
@@ -488,8 +489,8 @@ export const openApiSpec = {
     '/v1/user/auth/login': {
       post: {
         tags: ['Website User Auth'],
-        summary: 'Website User Login',
-        description: 'Authenticates website user, sets HttpOnly access_token cookie, tracks returning visits.',
+        summary: 'Website User Login (Step 1: Credentials -> Send 4-Digit OTP)',
+        description: 'Validates email and password, generates a 4-digit OTP valid for 5 minutes, and sends it to the user email from info@dreamkeykol.com.',
         requestBody: {
           required: true,
           content: {
@@ -507,20 +508,16 @@ export const openApiSpec = {
         },
         responses: {
           '200': {
-            description: 'Login successful.',
+            description: 'OTP sent to email. Valid for 5 minutes.',
             content: {
               'application/json': {
                 schema: {
                   type: 'object',
                   properties: {
-                    user: {
-                      type: 'object',
-                      properties: {
-                        id: { type: 'string' },
-                        name: { type: 'string' },
-                        email: { type: 'string' },
-                      },
-                    },
+                    success: { type: 'boolean', example: true },
+                    requiresOtp: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'A 4-digit verification code has been sent to your email. Valid for 5 minutes.' },
+                    email: { type: 'string', example: 'john@example.com' },
                   },
                 },
               },
@@ -538,6 +535,176 @@ export const openApiSpec = {
                 },
               },
             },
+          },
+          '403': {
+            description: 'Account deactivated.',
+          },
+        },
+      },
+    },
+    '/v1/user/auth/verify-login-otp': {
+      post: {
+        tags: ['Website User Auth'],
+        summary: 'Verify Login OTP (Step 2: Match OTP -> Mark Email Verified -> Login)',
+        description: 'Verifies the 4-digit OTP (valid for 5 minutes). On success, marks emailVerified=true, tracks login stats, creates session and sets HttpOnly cookies.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'otp'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'john@example.com' },
+                  otp: { type: 'string', minLength: 4, maxLength: 4, example: '4829' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Login successful. Email verified.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Login successful. Email verified.' },
+                    user: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string' },
+                        name: { type: 'string' },
+                        email: { type: 'string' },
+                        emailVerified: { type: 'boolean', example: true },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '400': {
+            description: 'Invalid or expired OTP.',
+          },
+        },
+      },
+    },
+    '/v1/user/auth/resend-otp': {
+      post: {
+        tags: ['Website User Auth'],
+        summary: 'Resend 4-Digit OTP',
+        description: 'Generates and dispatches a fresh 4-digit OTP (valid for 5 minutes) from info@dreamkeykol.com for either LOGIN or PASSWORD_RESET.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'john@example.com' },
+                  purpose: { type: 'string', enum: ['LOGIN', 'PASSWORD_RESET'], default: 'LOGIN' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'New OTP dispatched.',
+          },
+        },
+      },
+    },
+    '/v1/user/auth/forgot-password': {
+      post: {
+        tags: ['Website User Auth'],
+        summary: 'Forgot Password (Step 1: Request 4-Digit Reset OTP)',
+        description: 'Dispatches a 4-digit password reset OTP (valid for 5 minutes) to the user email from info@dreamkeykol.com.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'john@example.com' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Reset OTP sent to email.',
+          },
+          '404': {
+            description: 'No account found with this email.',
+          },
+        },
+      },
+    },
+    '/v1/user/auth/verify-reset-otp': {
+      post: {
+        tags: ['Website User Auth'],
+        summary: 'Verify Reset Password OTP (Step 2: Pre-check OTP)',
+        description: 'Validates if the provided 4-digit password reset OTP is valid and within the 5-minute window.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'otp'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'john@example.com' },
+                  otp: { type: 'string', minLength: 4, maxLength: 4, example: '4829' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'OTP verified successfully.',
+          },
+          '400': {
+            description: 'Invalid or expired OTP.',
+          },
+        },
+      },
+    },
+    '/v1/user/auth/reset-password': {
+      post: {
+        tags: ['Website User Auth'],
+        summary: 'Reset Password (Step 3: OTP + New Password -> Complete)',
+        description: 'Validates 4-digit OTP, updates user passwordHash, marks emailVerified=true, revokes older sessions, and confirms reset.',
+        requestBody: {
+          required: true,
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                required: ['email', 'otp', 'newPassword'],
+                properties: {
+                  email: { type: 'string', format: 'email', example: 'john@example.com' },
+                  otp: { type: 'string', minLength: 4, maxLength: 4, example: '4829' },
+                  newPassword: { type: 'string', minLength: 6, example: 'newPassword123' },
+                },
+              },
+            },
+          },
+        },
+        responses: {
+          '200': {
+            description: 'Password reset successfully.',
+          },
+          '400': {
+            description: 'Invalid or expired OTP or invalid password.',
           },
         },
       },
@@ -653,22 +820,23 @@ export const openApiSpec = {
           { name: 'search', in: 'query', schema: { type: 'string' } },
           { name: 'status', in: 'query', schema: { type: 'string', enum: ['active', 'inactive', 'all'] } },
           { name: 'authProvider', in: 'query', description: 'Filter by auth provider (e.g. EMAIL, GOOGLE)', schema: { type: 'string', enum: ['EMAIL', 'GOOGLE'] } },
+          { name: 'hasClickedProperty', in: 'query', description: 'Filter users who have clicked on properties (true | false | all)', schema: { type: 'string', enum: ['true', 'false', 'all'] } },
           { name: 'sortBy', in: 'query', schema: { type: 'string', enum: ['createdAt', 'updatedAt', 'lastLoginAt', 'lastActiveAt', 'loginCount', 'name', 'email', 'authProvider', 'emailVerified'] } },
           { name: 'sortOrder', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'] } },
         ],
         responses: {
-          '200': { description: 'Paginated website users list.' },
+          '200': { description: 'Paginated website users list with totalPropertyClicks and hasClickedProperty indicators.' },
         },
       },
     },
     '/v1/admin/website-users/{id}': {
       get: {
         tags: ['Admin - Website Users'],
-        summary: 'Get Website User Details',
-        description: 'Full profile and recent session history of a website user.',
+        summary: 'Get Website User Details & Property Click History',
+        description: 'Full profile, recent session history, and full list of properties clicked by this user with exact timestamps.',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: {
-          '200': { description: 'User profile and session history.' },
+          '200': { description: 'User profile, session history, and propertyClicks history with exact dates, property names, and pricing.' },
           '404': { description: 'User not found.' },
         },
       },
@@ -1507,6 +1675,172 @@ export const openApiSpec = {
         responses: {
           '200': { description: 'Filter preset deleted.' },
           '404': { description: 'Preset not found.' },
+        },
+      },
+    },
+    '/v1/website/properties/list': {
+      get: {
+        tags: ['Website Properties'],
+        summary: 'Public Website Property Listing',
+        description: 'Returns all public properties where "showInWebsite" is true. Excludes drafts, archived listings, and sensitive internal CRM data. Returns public card fields with R2 cover image, amenities, and pricing.',
+        parameters: [
+          { name: 'page', in: 'query', schema: { type: 'integer', default: 1 }, description: 'Page number' },
+          { name: 'limit', in: 'query', schema: { type: 'integer', default: 12, maximum: 50 }, description: 'Items per page' },
+          { name: 'search', in: 'query', schema: { type: 'string' }, description: 'Search society/building, location, or city' },
+          { name: 'locationArea', in: 'query', schema: { type: 'string' }, description: 'Location or area name' },
+          { name: 'city', in: 'query', schema: { type: 'string' }, description: 'City name' },
+          { name: 'propertyType', in: 'query', schema: { type: 'string', enum: ['FLAT', 'LAND', 'WAREHOUSE', 'COMMERCIAL', 'OTHER'] } },
+          { name: 'pricingType', in: 'query', schema: { type: 'string', enum: ['SALE', 'RENT'] } },
+          { name: 'minPrice', in: 'query', schema: { type: 'number' }, description: 'Min asking price in INR' },
+          { name: 'maxPrice', in: 'query', schema: { type: 'number' }, description: 'Max asking price in INR' },
+          { name: 'bedrooms', in: 'query', schema: { type: 'string' }, description: 'e.g. "2", "3", "4", "4+"' },
+          { name: 'sortBy', in: 'query', schema: { type: 'string', enum: ['createdAt', 'askingPrice', 'carpetAreaSqFt', 'societyBuildingName'], default: 'createdAt' } },
+          { name: 'sortOrder', in: 'query', schema: { type: 'string', enum: ['asc', 'desc'], default: 'desc' } },
+        ],
+        responses: {
+          '200': {
+            description: 'Public property listing with cover images and pagination.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    properties: {
+                      type: 'array',
+                      items: {
+                        type: 'object',
+                        properties: {
+                          id: { type: 'string', format: 'uuid' },
+                          propertyType: { type: 'string', example: 'FLAT' },
+                          societyBuildingName: { type: 'string', example: 'DreamKey Altura' },
+                          locationArea: { type: 'string', example: 'New Town Action Area II' },
+                          city: { type: 'string', example: 'Kolkata' },
+                          carpetAreaSqFt: { type: 'number', example: 1850 },
+                          superBuiltUpAreaSqFt: { type: 'number', example: 2750 },
+                          askingPrice: { type: 'number', example: 18500000 },
+                          pricingType: { type: 'string', example: 'SALE' },
+                          bedrooms: { type: 'integer', example: 3 },
+                          bathrooms: { type: 'integer', example: 3 },
+                          amenities: { type: 'array', items: { type: 'string' }, example: ['Lake Facing', 'Sky Lounge'] },
+                          availabilityStatus: { type: 'string', example: 'AVAILABLE' },
+                          coverImage: { type: 'string', format: 'uri', example: 'https://pub-xxx.r2.dev/properties/123/cover.jpg' },
+                          previewImages: { type: 'array', items: { type: 'string', format: 'uri' } },
+                        },
+                      },
+                    },
+                    pagination: {
+                      type: 'object',
+                      properties: {
+                        total: { type: 'integer', example: 1 },
+                        page: { type: 'integer', example: 1 },
+                        limit: { type: 'integer', example: 12 },
+                        totalPages: { type: 'integer', example: 1 },
+                        hasNextPage: { type: 'boolean' },
+                        hasPrevPage: { type: 'boolean' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+    '/v1/website/properties/list/{id}/click': {
+      post: {
+        tags: ['Website Properties'],
+        summary: 'Record Website User Property Click / Interest',
+        description: 'Requires website customer authentication. Records that this logged-in user clicked on a specific property, including client IP, user agent, and timestamp.',
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Property UUID' },
+        ],
+        responses: {
+          '201': {
+            description: 'Property click recorded successfully.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    message: { type: 'string', example: 'Property click recorded successfully' },
+                    data: {
+                      type: 'object',
+                      properties: {
+                        clickId: { type: 'string', format: 'uuid' },
+                        propertyId: { type: 'string', format: 'uuid' },
+                        societyBuildingName: { type: 'string', example: 'DreamKey Altura' },
+                        userId: { type: 'string', format: 'uuid' },
+                        userEmail: { type: 'string', format: 'email' },
+                        recordedAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Website login required (Session cookie or Bearer token).' },
+          '404': { description: 'Property not found or not published on website.' },
+        },
+      },
+    },
+    '/v1/website/properties/list/{id}': {
+      get: {
+        tags: ['Website Properties'],
+        summary: 'Get Authenticated Property Details (Sanitized)',
+        description: 'Requires website customer authentication. Returns complete property specifications and public media (photos, floor plans). Strictly strips internal CRM notes, broker/owner personal details, and private PDFs.',
+        parameters: [
+          { name: 'id', in: 'path', required: true, schema: { type: 'string', format: 'uuid' }, description: 'Property UUID' },
+        ],
+        responses: {
+          '200': {
+            description: 'Sanitized property details.',
+            content: {
+              'application/json': {
+                schema: {
+                  type: 'object',
+                  properties: {
+                    success: { type: 'boolean', example: true },
+                    property: {
+                      type: 'object',
+                      properties: {
+                        id: { type: 'string', format: 'uuid' },
+                        propertyType: { type: 'string' },
+                        societyBuildingName: { type: 'string' },
+                        locationArea: { type: 'string' },
+                        city: { type: 'string' },
+                        pincode: { type: 'string' },
+                        floorNumber: { type: 'integer', nullable: true },
+                        totalFloors: { type: 'integer', nullable: true },
+                        bedrooms: { type: 'integer', nullable: true },
+                        bathrooms: { type: 'integer', nullable: true },
+                        balconies: { type: 'integer', nullable: true },
+                        carpetAreaSqFt: { type: 'number' },
+                        superBuiltUpAreaSqFt: { type: 'number', nullable: true },
+                        pricingType: { type: 'string' },
+                        askingPrice: { type: 'number' },
+                        availabilityStatus: { type: 'string' },
+                        availabilityDate: { type: 'string', nullable: true },
+                        builderName: { type: 'string', nullable: true },
+                        yearOfConstruction: { type: 'integer', nullable: true },
+                        totalUnits: { type: 'integer', nullable: true },
+                        amenities: { type: 'array', items: { type: 'string' } },
+                        reraNumber: { type: 'string', nullable: true },
+                        coverImage: { type: 'string', nullable: true },
+                        media: { type: 'array', items: { type: 'object' } },
+                        createdAt: { type: 'string', format: 'date-time' },
+                      },
+                    },
+                  },
+                },
+              },
+            },
+          },
+          '401': { description: 'Website login required (Session cookie or Bearer token).' },
+          '404': { description: 'Property not found or not published on website.' },
         },
       },
     },
