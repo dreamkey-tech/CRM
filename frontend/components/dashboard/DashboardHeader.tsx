@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
+import { useRouter, useNavLoader } from '../../context/NavigationLoaderContext'
 import {
   Bell,
   Sun,
@@ -15,10 +16,30 @@ import {
   Calendar,
   Building,
   CheckCircle2,
+  RefreshCw,
+  CheckCheck,
+  Inbox,
+  AlertCircle,
+  ExternalLink,
 } from 'lucide-react'
 import { useAuthStore } from '../../store/useAuthStore'
 import { useThemeStore } from '../../store/useThemeStore'
+import { useRefreshStore } from '../../store/useRefreshStore'
+import { useNotificationStore } from '../../store/useNotificationStore'
+import type { CrmNotification } from '../../api/notifications'
 import { toast } from '../../utils/toast'
+
+function formatTimeAgo(isoString: string): string {
+  try {
+    const diff = Math.floor((Date.now() - new Date(isoString).getTime()) / 1000)
+    if (diff < 60) return 'Just now'
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
+    return `${Math.floor(diff / 86400)}d ago`
+  } catch {
+    return 'Recent'
+  }
+}
 
 interface DashboardHeaderProps {
   activeTab?: string
@@ -29,11 +50,52 @@ export function DashboardHeader({
   activeTab = 'Overview',
   setActiveTab,
 }: DashboardHeaderProps) {
+  const router = useRouter()
+  const { startLoading, stopLoading } = useNavLoader()
   const { user, logout, hasPermission } = useAuthStore()
   const { theme, toggleTheme } = useThemeStore()
+  const { refreshTick, isRefreshing, triggerRefresh } = useRefreshStore()
+  const {
+    notifications,
+    unreadCount,
+    loadNotifications,
+    markRead,
+    markAllRead,
+  } = useNotificationStore()
+
   const [profileOpen, setProfileOpen] = useState(false)
   const [notificationsOpen, setNotificationsOpen] = useState(false)
+  const [isMarkingAll, setIsMarkingAll] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+
+  // Poll notifications every 30 seconds and refresh immediately on refreshTick
+  useEffect(() => {
+    loadNotifications(refreshTick > 0)
+    const interval = setInterval(() => {
+      loadNotifications()
+    }, 30000)
+    return () => clearInterval(interval)
+  }, [loadNotifications, refreshTick])
+
+  const handleMarkAllRead = async () => {
+    try {
+      setIsMarkingAll(true)
+      await markAllRead()
+      toast.success('All marked as read', 'Your notifications are up to date.')
+    } catch {
+      toast.error('Failed to update notifications')
+    } finally {
+      setIsMarkingAll(false)
+    }
+  }
+
+  const handleNotificationClick = async (n: CrmNotification) => {
+    await markRead(n.id)
+    if (n.link) {
+      setNotificationsOpen(false)
+      router.push(n.link)
+    }
+  }
 
   const navItems = [
     { label: 'Overview', id: 'Overview' },
@@ -67,6 +129,14 @@ export function DashboardHeader({
 
   const userName = user?.name || user?.email?.split('@')[0] || 'Mainak K.'
   const userRole = user?.roles?.[0] || 'PRINCIPAL BROKER'
+
+  const handleGlobalRefresh = () => {
+    startLoading()
+    triggerRefresh()
+    setTimeout(() => {
+      stopLoading()
+    }, 450)
+  }
 
   return (
     <header className="w-full bg-surface border-b border-border/80 fixed top-0 z-40 shadow-xs transition-colors duration-200">
@@ -103,6 +173,20 @@ export function DashboardHeader({
 
 
 
+          {/* Global Page Refresh Button */}
+          <button
+            onClick={handleGlobalRefresh}
+            disabled={isRefreshing}
+            title="Refresh active page data"
+            className="w-9 h-9 rounded-xl bg-surface-secondary hover:bg-surface flex items-center justify-center text-foreground hover:text-gold transition-all cursor-pointer shadow-xs disabled:opacity-50"
+          >
+            <RefreshCw
+              className={`w-4 h-4 text-muted-text hover:text-foreground transition-all duration-300 ${
+                isRefreshing ? 'animate-spin text-gold' : ''
+              }`}
+            />
+          </button>
+
           {/* Theme Toggle (Dark / Light) */}
           <button
             onClick={toggleTheme}
@@ -120,41 +204,98 @@ export function DashboardHeader({
           <div className="relative">
             <button
               onClick={() => {
+                if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'default') {
+                  Notification.requestPermission().catch(() => {})
+                }
                 setNotificationsOpen(!notificationsOpen)
                 setProfileOpen(false)
               }}
-              className="w-9 h-9 rounded-xl bg-surface-secondary hover:bg-surface  flex items-center justify-center text-foreground hover:text-gold transition-all cursor-pointer relative shadow-xs"
+              title="Notifications"
+              className="w-9 h-9 rounded-xl bg-surface-secondary hover:bg-surface flex items-center justify-center text-foreground hover:text-gold transition-all cursor-pointer relative shadow-xs"
             >
               <Bell className="w-4 h-4 text-muted-text hover:text-foreground" />
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-gold animate-pulse" />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-gold text-black font-extrabold text-[10px] flex items-center justify-center leading-none animate-pulse shadow-sm">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
             </button>
 
             {/* Notifications Dropdown */}
             {notificationsOpen && (
-              <div className="absolute right-0 mt-2 w-80 bg-surface  border border-border shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+              <div className="absolute right-0 mt-2 w-84 sm:w-96 bg-surface border border-border shadow-2xl p-4 z-50 animate-in fade-in slide-in-from-top-2 duration-200 rounded-xl">
                 <div className="flex items-center justify-between pb-3 border-b border-border">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
-                    Notifications
-                  </h4>
-                  <span className="text-[10px] font-semibold bg-gold/20 text-dark-gold px-2 py-0.5 ">
-                    2 Unread
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-foreground">
+                      Notifications
+                    </h4>
+                    {unreadCount > 0 ? (
+                      <span className="text-[10px] font-semibold bg-gold/20 text-dark-gold px-2 py-0.5 rounded-full">
+                        {unreadCount} Unread
+                      </span>
+                    ) : (
+                      <span className="text-[10px] text-muted-text">All caught up</span>
+                    )}
+                  </div>
+                  {unreadCount > 0 && (
+                    <button
+                      onClick={handleMarkAllRead}
+                      disabled={isMarkingAll}
+                      className="text-[10px] font-medium text-gold hover:text-gold/80 transition-colors flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    >
+                      <CheckCheck className="w-3 h-3" />
+                      <span>Mark all read</span>
+                    </button>
+                  )}
                 </div>
-                <div className="divide-y divide-border/60 text-xs py-2">
-                  <div className="py-2.5">
-                    <p className="font-semibold text-foreground">New Mandate Agreement</p>
-                    <p className="text-muted-text text-[11px] mt-0.5">
-                      South Kolkata Estate agreement ready for executive review.
-                    </p>
-                    <span className="text-[10px] text-muted-text mt-1 inline-block">10m ago</span>
-                  </div>
-                  <div className="py-2.5">
-                    <p className="font-semibold text-foreground">Site Visit Confirmed</p>
-                    <p className="text-muted-text text-[11px] mt-0.5">
-                      Alipore Penthouse viewing scheduled for 11:30 AM.
-                    </p>
-                    <span className="text-[10px] text-muted-text mt-1 inline-block">45m ago</span>
-                  </div>
+
+                <div className="divide-y divide-border/60 text-xs py-2 max-h-[380px] overflow-y-auto">
+                  {notifications.length === 0 ? (
+                    <div className="py-8 text-center flex flex-col items-center justify-center text-muted-text">
+                      <Inbox className="w-8 h-8 opacity-40 mb-2" />
+                      <p className="text-xs">No notifications yet</p>
+                      <p className="text-[10px] text-muted-text/70 mt-0.5">
+                        New inquiries and assigned leads will appear here.
+                      </p>
+                    </div>
+                  ) : (
+                    notifications.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => handleNotificationClick(item)}
+                        className={`py-3 px-2 rounded-lg transition-colors cursor-pointer group flex items-start gap-3 ${
+                          !item.isRead
+                            ? 'bg-gold/5 hover:bg-gold/10'
+                            : 'hover:bg-surface-secondary/60'
+                        }`}
+                      >
+                        <div
+                          className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
+                            !item.isRead ? 'bg-gold' : 'bg-transparent'
+                          }`}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2">
+                            <p
+                              className={`text-xs truncate ${
+                                !item.isRead
+                                  ? 'font-bold text-foreground'
+                                  : 'font-medium text-muted-text'
+                              }`}
+                            >
+                              {item.title}
+                            </p>
+                            <span className="text-[10px] text-muted-text/70 shrink-0">
+                              {formatTimeAgo(item.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-muted-text text-[11px] mt-0.5 line-clamp-2 leading-relaxed">
+                            {item.message}
+                          </p>
+                        </div>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             )}

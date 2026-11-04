@@ -60,15 +60,11 @@ export function SocietySelectModal({
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-border shrink-0 bg-surface-secondary">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xs bg-gold/10 border border-gold/30 flex items-center justify-center text-gold">
-              <Sparkles className="w-4 h-4" />
-            </div>
+        
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
                 Pre-Fill From Existing Society
-                <span className="text-[9px] font-mono font-normal px-1.5 py-0.5 bg-gold/15 text-gold border border-gold/30">
-                  Fast 1-Click
-                </span>
+              
               </h3>
               <p className="text-[10px] text-muted-text">
                 Select an existing building/project to auto-populate repeated society info
@@ -261,10 +257,8 @@ export function SocietySelectModal({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-3 border-t border-border bg-surface-secondary/70 flex items-center justify-between text-muted-text shrink-0">
-          <span className="text-[10px]">
-            💡 Select any society to fill its address, building specifications, and amenities.
-          </span>
+        <div className="px-4 py-3 border-t border-border bg-surface-secondary/70 flex items-end justify-end text-muted-text shrink-0">
+       
           <button
             type="button"
             onClick={onClose}

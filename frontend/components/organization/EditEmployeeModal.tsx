@@ -11,6 +11,8 @@ import {
   DollarSign,
   FileCheck2,
   ChevronDown,
+  UserCheck,
+  CheckSquare2,
 } from 'lucide-react'
 import { toast } from '../../utils/toast'
 import { updateEmployeeApi } from '../../api/organization'
@@ -24,7 +26,7 @@ interface EditEmployeeModalProps {
 }
 
 interface ModuleRowConfig {
-  id: 'brokers' | 'properties' | 'clients' | 'owners'
+  id: string
   label: string
   description: string
   icon: React.ElementType
@@ -75,6 +77,26 @@ const CRUD_MODULES: ModuleRowConfig[] = [
     editKey: 'owners:update',
     deleteKey: 'owners:delete',
   },
+  {
+    id: 'users',
+    label: 'User Management',
+    description: 'Website users, customer enquiries, engagement and analytics',
+    icon: UserCheck,
+    viewKey: 'users:read',
+    createKey: 'users:create',
+    editKey: 'users:update',
+    deleteKey: 'users:delete',
+  },
+  {
+    id: 'tasks',
+    label: 'Tasks & Calendar',
+    description: 'Daily action queue, scheduled viewings, calls, and agent reminders',
+    icon: CheckSquare2,
+    viewKey: 'tasks:read',
+    createKey: 'tasks:create',
+    editKey: 'tasks:update',
+    deleteKey: 'tasks:delete',
+  },
 ]
 
 export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: EditEmployeeModalProps) {
@@ -110,6 +132,14 @@ export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: Edit
             'owners:create',
             'owners:update',
             'owners:delete',
+            'users:read',
+            'users:create',
+            'users:update',
+            'users:delete',
+            'tasks:read',
+            'tasks:create',
+            'tasks:update',
+            'tasks:delete',
             'finance:read',
             'finance:manage',
           ])
@@ -189,6 +219,9 @@ export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: Edit
             'clients:update',
             'brokers:read',
             'owners:read',
+            'tasks:read',
+            'tasks:create',
+            'tasks:update',
           ])
         )
         toast.info('Preset Applied', 'Configured Standard Sales Agent permissions.')
@@ -202,6 +235,9 @@ export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: Edit
             'clients:read',
             'clients:create',
             'clients:update',
+            'tasks:read',
+            'tasks:create',
+            'tasks:update',
           ])
         )
         toast.info('Preset Applied', 'Configured Telecaller permissions (KYC restricted).')
@@ -226,6 +262,14 @@ export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: Edit
             'owners:create',
             'owners:update',
             'owners:delete',
+            'users:read',
+            'users:create',
+            'users:update',
+            'users:delete',
+            'tasks:read',
+            'tasks:create',
+            'tasks:update',
+            'tasks:delete',
             'finance:read',
             'finance:manage',
           ])
@@ -234,7 +278,15 @@ export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: Edit
         break
       case 'VIEW_ONLY':
         setPermissions(
-          new Set(['properties:read', 'clients:read', 'brokers:read', 'owners:read', 'finance:read'])
+          new Set([
+            'properties:read',
+            'clients:read',
+            'brokers:read',
+            'owners:read',
+            'users:read',
+            'tasks:read',
+            'finance:read',
+          ])
         )
         toast.info('Preset Applied', 'Configured View-Only permissions across all modules.')
         break
@@ -279,6 +331,22 @@ export function EditEmployeeModal({ employee, isOpen, onClose, onSuccess }: Edit
         permissions.has('owners:delete')
           ? 'FULL'
           : permissions.has('owners:read')
+          ? 'VIEW'
+          : 'NONE',
+      users:
+        permissions.has('users:create') ||
+        permissions.has('users:update') ||
+        permissions.has('users:delete')
+          ? 'FULL'
+          : permissions.has('users:read')
+          ? 'VIEW'
+          : 'NONE',
+      tasks:
+        permissions.has('tasks:create') ||
+        permissions.has('tasks:update') ||
+        permissions.has('tasks:delete')
+          ? 'FULL'
+          : permissions.has('tasks:read')
           ? 'VIEW'
           : 'NONE',
       finance: permissions.has('finance:manage')

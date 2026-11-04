@@ -30,6 +30,18 @@ model User {
   clientSharesCreated   ClientPropertyShare[]       @relation("ClientShareCreator")
   clientDocumentsAdded  ClientDocument[]            @relation("ClientDocumentUploader")
   auditLogs             AuditLog[]                  @relation("UserAuditLogs")
+  notifications         Notification[]              @relation("UserNotifications")
+  tasksCreated          Task[]                      @relation("TaskCreator")
+  tasksCompleted        Task[]                      @relation("TaskCompleter")
+  taskAssignments       TaskAssignee[]              @relation("TaskAssigneeUser")
+  partnerTransactions   FinanceTransaction[]        @relation("TransactionPartner")
+  createdTransactions   FinanceTransaction[]        @relation("TransactionCreator")
+  salaryDisbursementsReceived SalaryDisbursement[]   @relation("SalaryEmployee")
+  salaryDisbursementsMade     SalaryDisbursement[]   @relation("SalaryDisburser")
+  forecastsCreated      UpcomingFinanceItem[]       @relation("ForecastCreator")
+  partnerForecasts      UpcomingFinanceItem[]       @relation("ForecastPartner")
+  duesAdvancesAsEmployee DueAndAdvanceRecord[]      @relation("DueAdvanceEmployee")
+  duesAdvancesCreated   DueAndAdvanceRecord[]       @relation("DueAdvanceCreator")
 
   @@map("users")
 }
@@ -194,6 +206,7 @@ model Broker {
 
   primaryContactPartner   User?        @relation("BrokerPrimaryPartner", fields: [primaryContactPartnerId], references: [id], onDelete: SetNull)
   properties              Property[]   @relation("BrokerProperties")
+  duesAndAdvances         DueAndAdvanceRecord[]
 
   @@index([status])
   @@index([phone])
@@ -224,6 +237,7 @@ model Owner {
   primaryContactPartner User?      @relation("OwnerPrimaryPartner", fields: [primaryContactPartnerId], references: [id], onDelete: SetNull)
   createdBy             User       @relation("OwnerCreator", fields: [createdById], references: [id], onDelete: Restrict)
   properties            Property[] @relation("OwnerProperties")
+  duesAndAdvances       DueAndAdvanceRecord[]
 
   @@index([phone])
   @@index([status])
@@ -287,6 +301,10 @@ model Client {
   assignedPartners      ClientPartnerAssignment[]
   shortlistedProperties ClientShortlistedProperty[]
   documents             ClientDocument[]
+  tasks                 Task[]                      @relation("ClientTasks")
+  financeTransactions   FinanceTransaction[]
+  upcomingFinanceItems  UpcomingFinanceItem[]
+  duesAndAdvances       DueAndAdvanceRecord[]
 
   @@index([phone])
   @@index([email])
@@ -502,6 +520,9 @@ model Property {
   auditLogs            PropertyAuditLog[]
   clientShortlists     ClientShortlistedProperty[]
   websiteClicks        WebsitePropertyClick[]
+  tasks                Task[]                      @relation("PropertyTasks")
+  financeTransactions  FinanceTransaction[]
+  upcomingFinanceItems UpcomingFinanceItem[]
 
   @@index([propertyType])
   @@index([availabilityStatus])
@@ -583,6 +604,11 @@ model AuditLog {
   resourceId   String?
   resourceName String?
   details      String?
+  changes      Json?    // Structured diff: [{ field, label, from, to }]
+  deviceType   String?  // "DESKTOP" | "MOBILE" | "TABLET" | "UNKNOWN"
+  deviceName   String?  // e.g. "Laptop (Windows • Chrome)" or "Phone (Android • Chrome)"
+  city         String?  // e.g. "Mumbai"
+  country      String?  // e.g. "IN"
   ipAddress    String?
   userAgent    String?
   status       String   @default("SUCCESS") // "SUCCESS" | "DENIED"
@@ -593,6 +619,7 @@ model AuditLog {
   @@index([userId])
   @@index([module])
   @@index([action])
+  @@index([deviceType])
   @@index([createdAt])
   @@map("audit_logs")
 }
@@ -613,4 +640,322 @@ model WebsitePropertyClick {
   @@index([createdAt])
   @@map("website_property_clicks")
 }
+
+model Notification {
+  id                 String    @id @default(uuid())
+  userId             String?   // Target employee ID (for direct 1-to-1 alerts)
+  requiredPermission String?   // e.g. "audit:read", "clients:read", "finance:read" (null = open broadcast)
+  targetRole         String?   // Optional legacy role target or null
+  title              String
+  message            String
+  type               String    // "NEW_ENQUIRY" | "LEAD_ASSIGNED" | "SHARE_VIEWED" | "SECURITY_ALERT" | "CLIENT_UPDATE" | "SYSTEM"
+  link               String?   // Direct navigation URL (e.g. "/dashboard/clients?id=...")
+  isRead             Boolean   @default(false)
+  readAt             DateTime?
+  metadata           Json?     // Optional payload (clientId, propertyId, enquiryId)
+  createdAt          DateTime  @default(now())
+
+  user               User?     @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([requiredPermission])
+  @@index([targetRole])
+  @@index([isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}
+
+// ==========================================
+// TASK MANAGEMENT & CALENDAR INTEGRATION
+// ==========================================
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum TaskCategory {
+  CLIENT_MEETING
+  SITE_VISIT
+  DOCUMENT_WORK
+  ADMIN
+  OTHER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model Task {
+  id             String       @id @default(uuid())
+  title          String
+  description    String?
+  dueDate        DateTime
+  priority       TaskPriority @default(MEDIUM)
+  category       TaskCategory @default(OTHER)
+  status         TaskStatus   @default(TODO)
+
+  // Creator & Completer
+  createdById    String
+  createdBy      User         @relation("TaskCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  completedById  String?
+  completedBy    User?        @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt    DateTime?
+
+  // Relational context
+  clientId       String?
+  client         Client?      @relation("ClientTasks", fields: [clientId], references: [id], onDelete: SetNull)
+
+  propertyId     String?
+  property       Property?    @relation("PropertyTasks", fields: [propertyId], references: [id], onDelete: SetNull)
+
+  // Master Google Calendar integration (dreamkeykol.com master calendar)
+  googleEventId  String?
+  googleSyncedAt DateTime?
+
+  // Assignees
+  assignees      TaskAssignee[]
+
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([priority])
+  @@index([category])
+  @@index([createdById])
+  @@index([completedAt])
+  @@index([clientId])
+  @@index([propertyId])
+  @@index([googleEventId])
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  taskId         String
+  userId         String
+  assignedAt     DateTime     @default(now())
+  reminderSentAt DateTime?
+
+  task           Task         @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user           User         @relation("TaskAssigneeUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId, taskId])
+  @@index([reminderSentAt])
+  @@map("task_assignees")
+}
+
+model OrganizationCalendarConfig {
+  id              String    @id @default("dreamkey-master")
+  connectedEmail  String    @default("info@dreamkeykol.com")
+  calendarId      String    @default("primary")
+  refreshToken    String?
+  accessToken     String?
+  tokenExpiry     DateTime?
+  syncEnabled     Boolean   @default(true)
+  masterFeedToken String    @unique @default(uuid())
+  lastSyncedAt    DateTime?
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("organization_calendar_configs")
+}
+
+// ==========================================
+// 3.9 FINANCE & REVENUE MODULE
+// ==========================================
+
+enum FinanceTransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum IncomeCategory {
+  BROKERAGE_RECEIVED
+  RENTAL_COMMISSION
+  SALE_COMMISSION
+  CONSULTATION_FEES
+  OTHER_INCOME
+}
+
+enum ExpenseCategory {
+  OFFICE_RENT
+  MARKETING
+  TRAVEL_FUEL
+  SALARY
+  UTILITIES
+  LEGAL_PROFESSIONAL
+  OFFICE_SUPPLIES
+  MISCELLANEOUS
+}
+
+enum PaymentMode {
+  BANK_TRANSFER
+  UPI
+  CHEQUE
+  CASH
+  DEMAND_DRAFT
+  OTHER
+}
+
+enum ForecastStatus {
+  PENDING
+  RECEIVED
+  PAID
+  CANCELLED
+}
+
+enum DueAdvanceType {
+  RECEIVABLE       // Money owed to company (e.g. pending brokerage invoice)
+  PAYABLE          // Money company owes (e.g. vendor dues, co-broker split)
+  ADVANCE_GIVEN    // Advance paid by company (e.g. employee salary advance, builder deposit)
+  ADVANCE_RECEIVED // Advance retainer/token received by company
+}
+
+enum DueAdvanceStatus {
+  PENDING
+  PARTIALLY_SETTLED
+  SETTLED
+  WRITTEN_OFF
+}
+
+model FinanceTransaction {
+  id              String                 @id @default(uuid())
+  type            FinanceTransactionType
+  incomeCategory  IncomeCategory?
+  expenseCategory ExpenseCategory?
+  amount          Float
+  transactionDate DateTime
+  paymentMode     PaymentMode            @default(BANK_TRANSFER)
+  referenceNumber String?                // UTR, Cheque No, Transaction Ref
+  description     String?
+  receiptUrl      String?
+
+  // Attribution & Linking
+  partnerId       String?                // Partner receiving income or paying expense
+  partner         User?                  @relation("TransactionPartner", fields: [partnerId], references: [id], onDelete: SetNull)
+
+  propertyId      String?
+  property        Property?              @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  clientId        String?
+  client          Client?                @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  createdById     String
+  createdBy       User                   @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  // Salary link if created via salary disbursement
+  salaryDisbursement SalaryDisbursement?
+
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([type, transactionDate])
+  @@index([partnerId])
+  @@index([propertyId])
+  @@index([clientId])
+  @@map("finance_transactions")
+}
+
+model SalaryDisbursement {
+  id              String              @id @default(uuid())
+  employeeId      String
+  employee        User                @relation("SalaryEmployee", fields: [employeeId], references: [id], onDelete: Cascade)
+
+  month           Int                 // 1 - 12
+  year            Int                 // e.g. 2026
+  baseSalary      Float
+  bonusIncentive  Float               @default(0)
+  deductions      Float               @default(0)
+  netPaid         Float
+  paymentDate     DateTime
+  paymentMode     PaymentMode         @default(BANK_TRANSFER)
+  referenceNumber String?
+  notes           String?
+
+  transactionId   String?             @unique
+  transaction     FinanceTransaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  disbursedById   String
+  disbursedBy     User                @relation("SalaryDisburser", fields: [disbursedById], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([employeeId, month, year])
+  @@index([year, month])
+  @@map("salary_disbursements")
+}
+
+model UpcomingFinanceItem {
+  id              String                 @id @default(uuid())
+  type            FinanceTransactionType // INCOME (expected commission) or EXPENSE (scheduled cost)
+  category        String                 // Category string matching Income/Expense enum
+  title           String                 // e.g. "South City flat closing commission"
+  expectedAmount  Float
+  expectedDate    DateTime
+  status          ForecastStatus         @default(PENDING)
+  notes           String?
+
+  propertyId      String?
+  property        Property?              @relation(fields: [propertyId], references: [id], onDelete: SetNull)
+
+  clientId        String?
+  client          Client?                @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  partnerId       String?
+  partner         User?                  @relation("ForecastPartner", fields: [partnerId], references: [id], onDelete: SetNull)
+
+  createdById     String
+  createdBy       User                   @relation("ForecastCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([type, status, expectedDate])
+  @@map("upcoming_finance_items")
+}
+
+model DueAndAdvanceRecord {
+  id              String           @id @default(uuid())
+  type            DueAdvanceType
+  partyName       String           // Name of client, broker, vendor, or employee
+  partyType       String           // "CLIENT" | "BROKER" | "OWNER" | "EMPLOYEE" | "VENDOR" | "OTHER"
+  totalAmount     Float
+  settledAmount   Float            @default(0)
+  remainingAmount Float            // totalAmount - settledAmount
+  dueDate         DateTime?
+  status          DueAdvanceStatus @default(PENDING)
+  notes           String?
+
+  clientId        String?
+  client          Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  brokerId        String?
+  broker          Broker?          @relation(fields: [brokerId], references: [id], onDelete: SetNull)
+
+  ownerId         String?
+  owner           Owner?           @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+
+  employeeId      String?
+  employee        User?            @relation("DueAdvanceEmployee", fields: [employeeId], references: [id], onDelete: SetNull)
+
+  createdById     String
+  createdBy       User             @relation("DueAdvanceCreator", fields: [createdById], references: [id], onDelete: Cascade)
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([type, status])
+  @@map("dues_and_advances")
+}
+
+
 

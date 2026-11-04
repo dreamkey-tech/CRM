@@ -5,6 +5,7 @@ export const auditQuerySchema = z.object({
   action: z.string().trim().optional(),
   status: z.enum(['ALL', 'SUCCESS', 'DENIED']).default('ALL'),
   userId: z.string().uuid().optional(),
+  deviceType: z.enum(['ALL', 'DESKTOP', 'MOBILE', 'TABLET']).default('ALL'),
   search: z.string().trim().max(100).optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(25),

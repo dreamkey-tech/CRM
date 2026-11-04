@@ -175,36 +175,40 @@ export function NavigationLoaderProvider({
           role="status"
           aria-live="polite"
           aria-label="Loading page..."
-          className="fixed inset-0 z-99999 flex items-center justify-center backdrop-blur-xs select-none animate-in fade-in duration-150"
+          className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/50 backdrop-blur-sm select-none animate-in fade-in duration-150"
         >
-          <div className="  px-8 py-6  flex flex-col items-center justify-center min-w-[170px] animate-in zoom-in-95 duration-150">
-            {/* DreamKey Brand Logo (no spin) */}
-            <div className="relative w-28 h-12 flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center animate-in zoom-in-95 duration-150">
+            {/* DreamKey Brand Logo */}
+            <div className="relative w-36 h-16 flex items-center justify-center">
               <Image
                 src="/logorbg.png"
                 alt="DreamKey"
-                width={112}
-                height={48}
-                className="object-contain"
+                width={140}
+                height={60}
+                className="object-contain drop-shadow-[0_0_16px_rgba(212,175,55,0.4)]"
                 priority
               />
             </div>
 
             {/* 3-Dots Animated Indicator Underneath Logo */}
-            <div className="flex items-center justify-center gap-1.5 mt-3.5">
+            <div className="flex items-center justify-center gap-2 mt-3">
               <span
-                className="w-2 h-2 bg-gold animate-bounce"
+                className="w-2.5 h-2.5 rounded-full bg-gold shadow-[0_0_8px_rgba(212,175,55,0.8)] animate-bounce"
                 style={{ animationDelay: '-0.32s' }}
               />
               <span
-                className="w-2 h-2 bg-gold animate-bounce"
+                className="w-2.5 h-2.5 rounded-full bg-gold shadow-[0_0_8px_rgba(212,175,55,0.8)] animate-bounce"
                 style={{ animationDelay: '-0.16s' }}
               />
               <span
-                className="w-2 h-2 bg-gold animate-bounce"
+                className="w-2.5 h-2.5 rounded-full bg-gold shadow-[0_0_8px_rgba(212,175,55,0.8)] animate-bounce"
                 style={{ animationDelay: '0s' }}
               />
             </div>
+
+            <p className="text-[10px] font-bold uppercase tracking-widest text-gold/80 mt-2">
+              Loading...
+            </p>
           </div>
         </div>
       )}

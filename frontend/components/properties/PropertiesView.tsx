@@ -33,6 +33,7 @@ import { useRouter } from '../../context/NavigationLoaderContext'
 import { useDebounce } from '../../utils/useDebounce'
 import { toast } from '../../utils/toast'
 import { useAuthStore } from '../../store/useAuthStore'
+import { useRefreshStore } from '../../store/useRefreshStore'
 import { handleActionApiError } from '../../utils/errorHandler'
 import {
   getProperties,
@@ -381,6 +382,12 @@ export function PropertiesView() {
   }, [fetchPropertiesList])
 
   // ── Handlers ───────────────────────────────────────────────────────────────
+  const { refreshTick } = useRefreshStore()
+  useEffect(() => {
+    if (refreshTick > 0) {
+      fetchPropertiesList(pagination.page)
+    }
+  }, [refreshTick, fetchPropertiesList, pagination.page])
 
   const handleRefresh = () => {
     setIsRefreshing(true)

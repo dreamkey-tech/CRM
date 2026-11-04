@@ -10,7 +10,8 @@ import { getR2PublicUrl } from '../lib/r2'
 import { publicPropertySnapshotSchema } from '../zod/client'
 import dreamkey from '../../../frontend/config/dreamkey-public.json'
 import { getClientDocumentRule } from '../config/media-config'
-import { logAudit } from '../lib/audit'
+import { logAudit, computeEntityDiff } from '../lib/audit'
+import { createNotification } from '../lib/notifications'
 
 const clientInclude = {
   createdBy: { select: partnerSelect },
@@ -89,6 +90,41 @@ export async function createClientController(c: Context<AppEnv>) {
   const client = await c.get('prisma').client.create({ data: { ...data, name: data.name!, phone: data.phone!, createdById: user.id,
     assignedPartners: { create: (assignedPartnerIds || []).map(partnerId => ({ partnerId, assignedById: user.id })) },
   }, include: clientInclude })
+
+  const { diffs, summary } = computeEntityDiff(null, {
+    name: client.name,
+    phone: client.phone,
+    email: client.email,
+    whatsappNumber: client.whatsappNumber,
+    address: client.address,
+    notes: client.notes,
+    status: client.status,
+  })
+  await logAudit(c, {
+    action: 'CREATE',
+    module: 'CLIENTS',
+    resourceId: client.id,
+    resourceName: client.name,
+    details: `Added new client '${client.name}' (${client.phone})${summary ? ` | ${summary}` : ''}`,
+    changes: diffs,
+  })
+
+  // Notify assigned partners if assigned by another staff member
+  if (assignedPartnerIds && assignedPartnerIds.length > 0) {
+    for (const pId of assignedPartnerIds) {
+      if (pId !== user.id) {
+        await createNotification(c.get('prisma'), {
+          userId: pId,
+          type: 'LEAD_ASSIGNED',
+          title: 'New Client Assigned',
+          message: `${user.name || 'Admin'} assigned you to client ${client.name}`,
+          link: `/dashboard/clients?id=${client.id}`,
+          metadata: { clientId: client.id, clientName: client.name },
+        })
+      }
+    }
+  }
+
   return c.json({ success: true, client, message: 'Client added.' }, 201)
 }
 export async function listClientsController(c: Context<AppEnv>) {
@@ -115,7 +151,7 @@ export async function getClientController(c: Context<AppEnv>) {
   return c.json({ success: true, client: { ...client, shares: shares.map(share => shareResponse(c, share)) } })
 }
 export async function updateClientController(c: Context<AppEnv>) {
-  await requireClient(c)
+  const existing = await requireClient(c)
   const user = actor(c), { assignedPartnerIds, data } = cleanFields(c.req.valid('json' as never) as UpdateClientInput)
   await validatePartners(c, assignedPartnerIds)
   const client = await c.get('prisma').client.update({ where: { id: id(c) }, data: { ...data,
@@ -124,14 +160,34 @@ export async function updateClientController(c: Context<AppEnv>) {
       upsert: assignedPartnerIds.map(partnerId => ({ where: { clientId_partnerId: { clientId: id(c), partnerId } }, update: {}, create: { partnerId, assignedById: user.id } })),
     } }),
   }, include: clientInclude })
+
+  const { diffs, summary } = computeEntityDiff(existing, client)
+  if (diffs.length > 0) {
+    await logAudit(c, {
+      action: 'UPDATE',
+      module: 'CLIENTS',
+      resourceId: client.id,
+      resourceName: client.name,
+      details: `Updated client '${client.name}': ${summary}`,
+      changes: diffs,
+    })
+  }
+
   return c.json({ success: true, client, message: 'Client details saved.' })
 }
 export async function deleteClientController(c: Context<AppEnv>) {
-  await requireClient(c)
+  const existing = await requireClient(c)
   const db = c.get('prisma')
   const [documents, shares] = await Promise.all([db.clientDocument.count({ where: { clientId: id(c) } }), db.clientPropertyShare.count({ where: { clientId: id(c) } })])
   if (documents || shares) throw new AppError('This client has documents or sharing history. Mark the client Inactive to preserve these records.', 409, 'CLIENT_HAS_HISTORY')
   await db.client.delete({ where: { id: id(c) } })
+  await logAudit(c, {
+    action: 'DELETE',
+    module: 'CLIENTS',
+    resourceId: existing.id,
+    resourceName: existing.name,
+    details: `Deleted client '${existing.name}' (${existing.phone})`,
+  })
   return c.json({ success: true, message: 'Client removed. Properties have been kept.' })
 }
 export async function clientPropertyOptionsController(c: Context<AppEnv>) {
@@ -142,14 +198,23 @@ export async function clientPropertyOptionsController(c: Context<AppEnv>) {
   return c.json({ success: true, properties, pagination: { total, page, hasNextPage: page * 12 < total } })
 }
 export async function addClientShortlistController(c: Context<AppEnv>) {
-  await requireClient(c)
+  const client = await requireClient(c)
   const body = c.req.valid('json' as never) as AddClientShortlistInput, db = c.get('prisma')
-  const property = await db.property.findFirst({ where: { id: body.propertyId, isDraft: false, isArchived: false }, select: { id: true } })
+  const property = await db.property.findFirst({ where: { id: body.propertyId, isDraft: false, isArchived: false }, select: { id: true, societyBuildingName: true } })
   if (!property) throw new AppError('This property is unavailable or still a draft.', 400, 'PROPERTY_UNAVAILABLE')
   const shortlist = await db.clientShortlistedProperty.upsert({ where: { clientId_propertyId: { clientId: id(c), propertyId: body.propertyId } }, update: {},
     create: { clientId: id(c), propertyId: body.propertyId, notes: body.notes || null, addedById: actor(c).id },
     include: { property: { select: clientPropertySelect }, addedBy: { select: partnerSelect } },
   })
+
+  await logAudit(c, {
+    action: 'SHORTLIST_PROPERTY',
+    module: 'CLIENTS',
+    resourceId: shortlist.id,
+    resourceName: property.societyBuildingName || 'Property',
+    details: `Shortlisted '${property.societyBuildingName || 'Property'}' for client '${client.name}'`,
+  })
+
   return c.json({ success: true, shortlist }, 201)
 }
 export async function updateClientShortlistController(c: Context<AppEnv>) {
@@ -160,11 +225,21 @@ export async function updateClientShortlistController(c: Context<AppEnv>) {
   return c.json({ success: true, shortlist })
 }
 export async function removeClientShortlistController(c: Context<AppEnv>) {
+  const client = await requireClient(c)
   const db = c.get('prisma'), shortlistId = c.req.param('shortlistId')!
-  const shortlist = await db.clientShortlistedProperty.findFirst({ where: { id: shortlistId, clientId: id(c) }, include: { _count: { select: { shares: true } } } })
+  const shortlist = await db.clientShortlistedProperty.findFirst({ where: { id: shortlistId, clientId: id(c) }, include: { _count: { select: { shares: true } }, property: { select: { societyBuildingName: true } } } })
   if (!shortlist) throw new AppError('Shortlisted property not found.', 404)
   if (shortlist._count.shares) throw new AppError('This property has sharing history. Mark it Not Interested to preserve that history.', 409, 'SHORTLIST_HAS_HISTORY')
   await db.clientShortlistedProperty.delete({ where: { id: shortlistId } })
+
+  await logAudit(c, {
+    action: 'REMOVE_SHORTLIST',
+    module: 'CLIENTS',
+    resourceId: shortlistId,
+    resourceName: shortlist.property?.societyBuildingName || 'Property',
+    details: `Removed '${shortlist.property?.societyBuildingName || 'Property'}' from client '${client.name}' shortlist`,
+  })
+
   return c.json({ success: true })
 }
 export async function createClientShareController(c: Context<AppEnv>) {
@@ -184,6 +259,15 @@ export async function createClientShareController(c: Context<AppEnv>) {
     expiresAt: body.expiresAt ? new Date(body.expiresAt) : null, createdById: actor(c).id,
     selectedMedia: { create: selected.map((item, order) => ({ propertyMediaId: item.id, order })) },
   }, include: { createdBy: { select: partnerSelect } } })
+
+  await logAudit(c, {
+    action: 'SHARE_PROPERTY',
+    module: 'CLIENTS',
+    resourceId: share.id,
+    resourceName: shortlist.property.societyBuildingName || 'Property',
+    details: `Shared property '${shortlist.property.societyBuildingName || 'Listing'}' with client '${client.name}' via ${body.channel}`,
+  })
+
   return c.json({ success: true, share: shareResponse(c, share) }, 201)
 }
 export async function updateClientShareStatusController(c: Context<AppEnv>) {
@@ -227,6 +311,16 @@ export async function publicClientShareController(c: Context<AppEnv>) {
       sizeBytes: item.media.sizeBytes,
       order: item.order,
     }))
+  // Notify the staff member who created the property share that client viewed the link
+  await createNotification(db, {
+    userId: share.createdById,
+    type: 'SHARE_VIEWED',
+    title: 'Client Viewed Property Deck',
+    message: `A client just opened the property share link for property (${share.propertyId.slice(0, 8)}).`,
+    link: `/dashboard/clients?id=${share.clientId}`,
+    metadata: { shareId: share.id, clientId: share.clientId, propertyId: share.propertyId },
+  })
+
   return c.json({ success: true, property: publicPropertySnapshotSchema.parse(share.propertySnapshot), availabilityStatus: share.shortlistedProperty.property.availabilityStatus,
     media, company: dreamkey, contact: { name: dreamkey.name, phone: dreamkey.phone, email: dreamkey.email },
   })
@@ -267,6 +361,15 @@ export async function attachClientDocumentController(c: Context<AppEnv>) {
     }
     return tx.clientDocument.create({ data: { ...body, title: body.title || null, clientId: id(c), uploadedById: actor(c).id }, select: documentSelect })
   })
+
+  await logAudit(c, {
+    action: 'UPLOAD_DOCUMENT',
+    module: 'DOCUMENTS',
+    resourceId: document.id,
+    resourceName: document.originalName,
+    details: `Uploaded ${document.category} document '${document.originalName}'`,
+  })
+
   return c.json({ success: true, document }, 201)
 }
 export async function downloadClientDocumentController(c: Context<AppEnv>) {
@@ -308,6 +411,15 @@ export async function deleteClientDocumentController(c: Context<AppEnv>) {
   if (!document) throw new AppError('Document not found.', 404)
   await removeClientDocumentObject(c.env, document.key)
   await db.clientDocument.delete({ where: { id: document.id } })
+
+  await logAudit(c, {
+    action: 'DELETE_DOCUMENT',
+    module: 'DOCUMENTS',
+    resourceId: document.id,
+    resourceName: document.originalName,
+    details: `Deleted ${document.category} document '${document.originalName}'`,
+  })
+
   return c.json({ success: true })
 }
 export async function discardClientDocumentUploadController(c: Context<AppEnv>) {

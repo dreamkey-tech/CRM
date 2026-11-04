@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import type { AppEnv } from '../db'
-import { authMiddleware, requirePermission } from '../middleware/auth'
+import { authMiddleware, requirePermission, requireAnyPermission } from '../middleware/auth'
 import {
   getWebsiteUserStatsController,
   getWebsiteUsersListController,
@@ -23,20 +23,20 @@ export const adminWebsiteUserRoutes = new Hono<AppEnv>()
 adminWebsiteUserRoutes.use('*', authMiddleware)
 
 // Analytics & Stats for CRM Dashboard
-adminWebsiteUserRoutes.get('/stats', requirePermission('employees:read'), getWebsiteUserStatsController)
+adminWebsiteUserRoutes.get('/stats', requireAnyPermission(['users:read', 'employees:read']), getWebsiteUserStatsController)
 
 // Website Enquiries Management Routes
-adminWebsiteUserRoutes.get('/enquiries/stats', requirePermission('clients:read'), getWebsiteEnquiryStatsController)
-adminWebsiteUserRoutes.get('/enquiries', requirePermission('clients:read'), getWebsiteEnquiriesListController)
-adminWebsiteUserRoutes.patch('/enquiries/:id/status', requirePermission('clients:update'), updateWebsiteEnquiryStatusController)
-adminWebsiteUserRoutes.delete('/enquiries/:id', requirePermission('clients:delete'), deleteWebsiteEnquiryController)
+adminWebsiteUserRoutes.get('/enquiries/stats', requireAnyPermission(['users:read', 'clients:read']), getWebsiteEnquiryStatsController)
+adminWebsiteUserRoutes.get('/enquiries', requireAnyPermission(['users:read', 'clients:read']), getWebsiteEnquiriesListController)
+adminWebsiteUserRoutes.patch('/enquiries/:id/status', requireAnyPermission(['users:update', 'clients:update']), updateWebsiteEnquiryStatusController)
+adminWebsiteUserRoutes.delete('/enquiries/:id', requireAnyPermission(['users:delete', 'clients:delete']), deleteWebsiteEnquiryController)
 
 // List website users with search, pagination, filters
-adminWebsiteUserRoutes.get('/', requirePermission('employees:read'), getWebsiteUsersListController)
+adminWebsiteUserRoutes.get('/', requireAnyPermission(['users:read', 'employees:read']), getWebsiteUsersListController)
 
 // Get website user profile & session history
-adminWebsiteUserRoutes.get('/:id', requirePermission('employees:read'), getWebsiteUserDetailController)
+adminWebsiteUserRoutes.get('/:id', requireAnyPermission(['users:read', 'employees:read']), getWebsiteUserDetailController)
 
 // Update user status (active / deactive)
-adminWebsiteUserRoutes.patch('/:id/status', requirePermission('employees:manage'), updateWebsiteUserStatusController)
+adminWebsiteUserRoutes.patch('/:id/status', requireAnyPermission(['users:update', 'employees:manage']), updateWebsiteUserStatusController)
 

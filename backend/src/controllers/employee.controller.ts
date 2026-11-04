@@ -54,6 +54,24 @@ export function moduleAccessToPermissions(access: ModuleAccessInput): string[] {
     perms.add('owners:delete')
   }
 
+  // Users (Website Users & Enquiries)
+  if (access.users === 'VIEW') perms.add('users:read')
+  if (access.users === 'FULL') {
+    perms.add('users:read')
+    perms.add('users:create')
+    perms.add('users:update')
+    perms.add('users:delete')
+  }
+
+  // Tasks
+  if (access.tasks === 'VIEW') perms.add('tasks:read')
+  if (access.tasks === 'FULL') {
+    perms.add('tasks:read')
+    perms.add('tasks:create')
+    perms.add('tasks:update')
+    perms.add('tasks:delete')
+  }
+
   // Finance
   if (access.finance === 'VIEW') perms.add('finance:read')
   if (access.finance === 'FULL') {
@@ -79,6 +97,8 @@ export function permissionsToModuleAccess(permissions: string[]): ModuleAccessIn
     clients: calc('clients:read', 'clients:create'),
     brokers: calc('brokers:read', 'brokers:create'),
     owners: calc('owners:read', 'owners:create'),
+    users: calc('users:read', 'users:create'),
+    tasks: calc('tasks:read', 'tasks:create'),
     finance: has('finance:manage') ? 'FULL' : has('finance:read') ? 'VIEW' : 'NONE',
     canViewSensitiveDocs: has('clients:documents:view_sensitive'),
   }

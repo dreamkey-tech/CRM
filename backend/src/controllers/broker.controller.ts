@@ -5,6 +5,7 @@ import { directoryInclude, validateContactPartner, linkedPropertiesController } 
 import { brokerQuerySchema } from '../zod/broker'
 import { AppError } from '../lib/errors'
 import { BrokerStatus } from '@prisma/client'
+import { logAudit, computeEntityDiff } from '../lib/audit'
 
 /**
  * Helper to clean empty string values into null for optional DB columns
@@ -60,6 +61,22 @@ export const createBrokerController = async (c: Context<AppEnv>) => {
         notes: data.notes ?? null,
       },
       include: directoryInclude,
+    })
+
+    const { diffs, summary } = computeEntityDiff(null, {
+      name: broker.name,
+      phone: broker.phone,
+      email: broker.email,
+      areaOfOperation: broker.areaOfOperation,
+      status: broker.status,
+    })
+    await logAudit(c, {
+      action: 'CREATE',
+      module: 'BROKERS',
+      resourceId: broker.id,
+      resourceName: broker.name,
+      details: `Added new broker '${broker.name}' (${broker.phone || 'No phone'})${summary ? ` | ${summary}` : ''}`,
+      changes: diffs,
     })
 
     return c.json(
@@ -306,6 +323,18 @@ export const updateBrokerController = async (c: Context<AppEnv>) => {
     include: directoryInclude,
   })
 
+  const { diffs, summary } = computeEntityDiff(existingBroker, updatedBroker)
+  if (diffs.length > 0) {
+    await logAudit(c, {
+      action: 'UPDATE',
+      module: 'BROKERS',
+      resourceId: updatedBroker.id,
+      resourceName: updatedBroker.name,
+      details: `Updated broker '${updatedBroker.name}': ${summary}`,
+      changes: diffs,
+    })
+  }
+
   return c.json({
     success: true,
     message: 'Broker information updated successfully.',
@@ -338,6 +367,14 @@ export const deleteBrokerController = async (c: Context<AppEnv>) => {
 
   await prisma.broker.delete({
     where: { id: brokerId },
+  })
+
+  await logAudit(c, {
+    action: 'DELETE',
+    module: 'BROKERS',
+    resourceId: existingBroker.id,
+    resourceName: existingBroker.name,
+    details: `Deleted broker '${existingBroker.name}' (${existingBroker.phone || 'No phone'})`,
   })
 
   return c.json({

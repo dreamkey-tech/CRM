@@ -136,3 +136,65 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ── Professional Print & PDF Engine Styles ── */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm 10mm 10mm;
+  }
+
+  :root,
+  .dark,
+  [data-theme="dark"] {
+    --background: #ffffff !important;
+    --surface: #ffffff !important;
+    --surface-secondary: #f8fafc !important;
+    --surface-elevated: #f1f5f9 !important;
+    --surface-card: #ffffff !important;
+    --foreground: #0f172a !important;
+    --foreground-muted: #64748b !important;
+    --border: #e2e8f0 !important;
+    --border-subtle: #cbd5e1 !important;
+  }
+
+  html,
+  body {
+    background: #ffffff !important;
+    color: #0f172a !important;
+    height: auto !important;
+    min-height: auto !important;
+    overflow: visible !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  /* Force print text colors for dark-mode inverted elements */
+  .print-black-text {
+    color: #0f172a !important;
+  }
+
+  .print-muted-text {
+    color: #64748b !important;
+  }
+
+  .print-border {
+    border-color: #cbd5e1 !important;
+  }
+
+  .print-bg-light {
+    background-color: #f8fafc !important;
+  }
+
+  .print-avoid-break {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Hide shadows, glows, and outline artifacts during PDF export */
+  * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+}

@@ -5,6 +5,7 @@ import type {
   UpdateEmployeePayload,
   AuditLogItem,
   AuditStats,
+  AuditUserSummary,
 } from '../types/organization'
 
 export async function listEmployeesApi(params?: {
@@ -53,13 +54,17 @@ export async function deleteEmployeeApi(
 
 export async function listAuditLogsApi(params?: {
   module?: string
+  action?: string
   status?: string
+  userId?: string
+  deviceType?: string
   search?: string
   page?: number
   limit?: number
 }): Promise<{
   success: boolean
   logs: AuditLogItem[]
+  userSummary?: AuditUserSummary | null
   pagination: { total: number; page: number; limit: number; totalPages: number }
 }> {
   const response = await apiClient.get('/admin/audit-logs', { params })

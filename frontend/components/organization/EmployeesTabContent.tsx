@@ -230,9 +230,9 @@ export function EmployeesTabContent() {
 
                     {/* Module Access Badges */}
                     <td className="py-3 px-4">
-                      <div className="flex flex-wrap items-center gap-1 max-w-sm">
-                        {(['brokers', 'properties', 'clients', 'owners'] as const).map((mod) => {
-                          const label = mod.charAt(0).toUpperCase() + mod.slice(1)
+                      <div className="flex flex-wrap items-center gap-1 max-w-md">
+                        {(['brokers', 'properties', 'clients', 'owners', 'users', 'tasks'] as const).map((mod) => {
+                          const label = mod === 'users' ? 'Users' : mod === 'tasks' ? 'Tasks' : mod.charAt(0).toUpperCase() + mod.slice(1)
                           if (isSuperAdmin) {
                             return (
                               <span

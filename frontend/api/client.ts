@@ -55,3 +55,9 @@ export const adminWebsiteUsersClient = createApiClient('/admin/website-users')
 // 7. Property Management & R2 Storage API Client (/api/v1/properties)
 export const propertyApiClient = createApiClient('/properties')
 
+// 8. Task Management & Calendar API Client (/api/v1/tasks)
+export const taskApiClient = createApiClient('/tasks')
+
+// 9. Finance & Revenue API Client (/api/v1/finance)
+export const financeApiClient = createApiClient('/finance')
+

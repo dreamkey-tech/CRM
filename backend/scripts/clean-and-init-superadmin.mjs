@@ -48,9 +48,21 @@ const SYSTEM_PERMISSIONS = [
   { name: 'owners:update', category: 'OWNERS', description: 'Edit owner details and assignments' },
   { name: 'owners:delete', category: 'OWNERS', description: 'Delete owner records' },
 
+  // User Management (Website Users & Enquiries)
+  { name: 'users:read', category: 'USERS', description: 'View website users, user analytics, and customer enquiries' },
+  { name: 'users:create', category: 'USERS', description: 'Register or onboard website user accounts and enquiries' },
+  { name: 'users:update', category: 'USERS', description: 'Update website user status and resolve customer enquiries' },
+  { name: 'users:delete', category: 'USERS', description: 'Delete website user records and customer enquiries' },
+
   // Finance
   { name: 'finance:read', category: 'FINANCE', description: 'View financial reports, brokerage ledgers, and transactions' },
   { name: 'finance:manage', category: 'FINANCE', description: 'Create and edit financial records and commissions' },
+
+  // Tasks
+  { name: 'tasks:read', category: 'TASKS', description: 'View assigned and team tasks' },
+  { name: 'tasks:create', category: 'TASKS', description: 'Create and assign tasks' },
+  { name: 'tasks:update', category: 'TASKS', description: 'Update task details and status' },
+  { name: 'tasks:delete', category: 'TASKS', description: 'Delete tasks' },
 
   // Employees & Organization (RBAC)
   { name: 'employees:read', category: 'ORGANIZATION', description: 'View staff members and access profiles' },

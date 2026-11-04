@@ -1,7 +1,7 @@
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import type { AppEnv } from '../db'
-import { authMiddleware, requirePermission } from '../middleware/auth'
+import { authMiddleware, requirePermission, requireAnyPermission } from '../middleware/auth'
 import {
   createRoleSchema,
   updateRoleSchema,
@@ -44,7 +44,7 @@ roleRoutes.put(
 
 roleRoutes.post(
   '/users/:id/roles',
-  requirePermission('users:update'),
+  requireAnyPermission(['users:update', 'employees:manage']),
   zValidator('json', assignUserRolesSchema, zodValidationHook),
   assignUserRolesController
 )

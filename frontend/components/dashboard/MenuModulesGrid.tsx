@@ -20,6 +20,7 @@ import { getWebsiteUserStats } from '../../api/websiteUsers'
 import { getOwnerStats } from '../../api/owners'
 import { getBrokerStats } from '../../api/brokers'
 import { getPropertyStats } from '../../api/properties'
+import { getTaskStats } from '../../api/tasks'
 
 interface MenuModule {
   id: string
@@ -41,6 +42,7 @@ export function MenuModulesGrid() {
   const [ownerCount, setOwnerCount] = useState<number | null>(null)
   const [brokerCount, setBrokerCount] = useState<number | null>(null)
   const [propertyCount, setPropertyCount] = useState<number | null>(null)
+  const [taskDueCount, setTaskDueCount] = useState<number | null>(null)
 
   useEffect(() => {
     getWebsiteUserStats()
@@ -55,6 +57,10 @@ export function MenuModulesGrid() {
 
     getPropertyStats()
       .then((s) => setPropertyCount(s.totalProperties))
+      .catch(() => {})
+
+    getTaskStats()
+      .then((s) => setTaskDueCount(s.dueToday))
       .catch(() => {})
   }, [])
 
@@ -122,15 +128,20 @@ export function MenuModulesGrid() {
       badge: 'Commission & Cash Flow',
       icon: WalletCards,
       image: 'Golden-Hour Finance Desk with City Skyline.png',
+      href: '/dashboard/finance',
       requiredPermission: 'finance:read',
     },
     {
-      id: 'followups',
-      title: 'Follow-ups / Tasks',
+      id: 'tasks',
+      title: 'Tasks',
       description: 'Daily action queues, scheduled viewings, calls, and agent reminders.',
-      badge: '8 Scheduled for Today',
+      badge:
+        taskDueCount !== null
+          ? `${taskDueCount} Scheduled for Today`
+          : 'Daily Action Queue',
       icon: CheckSquare2,
       image: 'Golden Hour Productivity Desk.png',
+      href: '/dashboard/tasks',
     },
     {
       id: 'website-users',

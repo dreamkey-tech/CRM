@@ -29,9 +29,21 @@ export const SYSTEM_PERMISSIONS = [
   { name: 'owners:update', category: 'OWNERS', description: 'Edit owner details and assignments' },
   { name: 'owners:delete', category: 'OWNERS', description: 'Delete owner records' },
 
+  // User Management (Website Users & Enquiries)
+  { name: 'users:read', category: 'USERS', description: 'View website users, user analytics, and customer enquiries' },
+  { name: 'users:create', category: 'USERS', description: 'Register or onboard website user accounts and enquiries' },
+  { name: 'users:update', category: 'USERS', description: 'Update website user status and resolve customer enquiries' },
+  { name: 'users:delete', category: 'USERS', description: 'Delete website user records and customer enquiries' },
+
   // Finance
   { name: 'finance:read', category: 'FINANCE', description: 'View financial reports, brokerage ledgers, and transactions' },
   { name: 'finance:manage', category: 'FINANCE', description: 'Create and edit financial records and commissions' },
+
+  // Tasks (FR-TK-01: Any partner can create and manage tasks)
+  { name: 'tasks:read', category: 'TASKS', description: 'View assigned and team tasks' },
+  { name: 'tasks:create', category: 'TASKS', description: 'Create and assign tasks' },
+  { name: 'tasks:update', category: 'TASKS', description: 'Update task details and status' },
+  { name: 'tasks:delete', category: 'TASKS', description: 'Delete tasks' },
 
   // Employees & Organization (RBAC)
   { name: 'employees:read', category: 'ORGANIZATION', description: 'View staff members and access profiles' },
@@ -59,11 +71,16 @@ let systemDefaultsSeeded = false
 export async function seedSystemDefaults(prisma: PrismaClient) {
   if (systemDefaultsSeeded) return
 
-  // Fast check: If permissions already exist, skip running 100 serial database upserts
+  // Fast check: If permissions already exist, skip running serial database upserts
   const count = await prisma.permission.count()
   if (count >= SYSTEM_PERMISSIONS.length) {
-    systemDefaultsSeeded = true
-    return
+    const existing = await prisma.permission.findMany({ select: { name: true } })
+    const existingSet = new Set(existing.map((p) => p.name))
+    const missing = SYSTEM_PERMISSIONS.filter((p) => !existingSet.has(p.name))
+    if (missing.length === 0) {
+      systemDefaultsSeeded = true
+      return
+    }
   }
 
   // 1. Seed all permissions (upsert to avoid duplicates)
@@ -126,6 +143,9 @@ export async function seedSystemDefaults(prisma: PrismaClient) {
       'clients:update',
       'brokers:read',
       'owners:read',
+      'tasks:read',
+      'tasks:create',
+      'tasks:update',
     ],
     true
   )
@@ -141,6 +161,9 @@ export async function seedSystemDefaults(prisma: PrismaClient) {
       'clients:read',
       'clients:create',
       'clients:update',
+      'tasks:read',
+      'tasks:create',
+      'tasks:update',
     ],
     true
   )
@@ -148,8 +171,8 @@ export async function seedSystemDefaults(prisma: PrismaClient) {
   // 5. Ensure VIEW_ONLY role exists
   await ensureRole(
     'VIEW_ONLY',
-    'Read-only access to properties, clients, brokers, and owners',
-    ['properties:read', 'clients:read', 'brokers:read', 'owners:read'],
+    'Read-only access to properties, clients, brokers, owners, users, and tasks',
+    ['properties:read', 'clients:read', 'brokers:read', 'owners:read', 'users:read', 'tasks:read'],
     true
   )
 

@@ -7,6 +7,8 @@ export interface ModuleAccess {
   owners: AccessLevel
   finance: AccessLevel
   canViewSensitiveDocs: boolean
+  users?: AccessLevel
+  tasks?: AccessLevel
 }
 
 export interface Employee {
@@ -37,14 +39,26 @@ export interface UpdateEmployeePayload {
   customPermissions?: string[]
 }
 
+export interface AuditLogChange {
+  field: string
+  label: string
+  from: any
+  to: any
+}
+
 export interface AuditLogItem {
   id: string
   action: string
   module: string
   details: string | null
+  changes: AuditLogChange[] | null
   resourceId: string | null
   resourceName: string | null
   status: 'SUCCESS' | 'DENIED'
+  deviceType: 'DESKTOP' | 'MOBILE' | 'TABLET' | 'UNKNOWN'
+  deviceName: string
+  city: string | null
+  country: string | null
   ipAddress: string | null
   userAgent: string | null
   createdAt: string
@@ -52,7 +66,36 @@ export interface AuditLogItem {
     id: string
     name: string
     email: string
+    role: string
+    roles: string[]
   } | null
+}
+
+export interface AuditUserSummary {
+  employee: {
+    id: string
+    name: string
+    email: string
+    isActive: boolean
+    role: string
+    roles: string[]
+  }
+  lastLogin: {
+    createdAt: string
+    deviceType: 'DESKTOP' | 'MOBILE' | 'TABLET' | 'UNKNOWN'
+    deviceName: string
+    ipAddress: string | null
+    city: string | null
+    country: string | null
+  } | null
+  totalActions: number
+  actionBreakdown: {
+    logins: number
+    creations: number
+    updates: number
+    deletions: number
+    views: number
+  }
 }
 
 export interface AuditStats {
@@ -60,4 +103,6 @@ export interface AuditStats {
   actionsToday: number
   securityDenials: number
   sensitiveDocViews: number
+  mobileActions?: number
+  desktopActions?: number
 }

@@ -1,6 +1,7 @@
 import type { Context } from 'hono'
 import type { AppEnv } from '../db'
 import type { CreateWebsiteEnquiryInput } from '../zod/website-enquiry'
+import { createNotification } from '../lib/notifications'
 
 /**
  * Public Endpoint to submit a website enquiry
@@ -32,6 +33,16 @@ export const createWebsiteEnquiryController = async (c: Context<AppEnv>) => {
       specificRequirements: body.specificRequirements?.trim() || null,
       status: 'NEW',
     },
+  })
+
+  // Broadcast notification to all roles with client intake permissions (and Super Admins via wildcard)
+  await createNotification(prisma, {
+    requiredPermission: 'clients:read',
+    type: 'NEW_ENQUIRY',
+    title: 'New Website Inquiry',
+    message: `${enquiry.fullName} inquired about ${enquiry.propertyType} in ${enquiry.preferredLocation}`,
+    link: '/dashboard',
+    metadata: { enquiryId: enquiry.id, budget: enquiry.estimatedBudgetBand },
   })
 
   return c.json(

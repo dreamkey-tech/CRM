@@ -14,6 +14,10 @@ import { propertyRoutes } from './routes/property'
 import { websitePropertyRoutes } from './routes/website-property'
 import { employeeRoutes } from './routes/employee'
 import { auditRoutes } from './routes/audit'
+import { notificationRoutes } from './routes/notification'
+import { dashboardRoutes } from './routes/dashboard'
+import { taskRoutes } from './routes/task'
+import { financeRoutes } from './routes/finance'
 import { authMiddleware, requirePermission } from './middleware/auth'
 import { openApiSpec } from './lib/openapi'
 import { AppError, formatSystemError } from './lib/errors'
@@ -172,19 +176,13 @@ app.route('/website/properties', websitePropertyRoutes)
 app.route('/v1/owners', ownerRoutes)
 app.route('/v1/clients', clientRoutes)
 app.route('/v1/public/property-shares', publicClientShareRoutes)
+app.route('/v1/notifications', notificationRoutes)
+app.route('/v1/tasks', taskRoutes)
+app.route('/v1/dashboard', dashboardRoutes)
 app.route('/api/auth', oauthRoutes)
 
-// Finance module endpoint (guarded by finance:read)
-app.get('/v1/finance', authMiddleware, requirePermission('finance:read'), (c) => {
-  return c.json({
-    success: true,
-    data: {
-      totalRevenue: 2450000,
-      pendingCommissions: 180000,
-      clearedCommissions: 2270000,
-    },
-  })
-})
+// Finance & Revenue module routes (guarded by finance:read / finance:manage)
+app.route('/v1/finance', financeRoutes)
 
 
 app.get('/', (c) => {

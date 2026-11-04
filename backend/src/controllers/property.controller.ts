@@ -22,6 +22,7 @@ import {
 } from '../lib/r2'
 import { PROPERTY_MEDIA_CONFIG } from '../config/media-config'
 import { Prisma, PrismaClient } from '@prisma/client'
+import { logAudit, computeEntityDiff } from '../lib/audit'
 
 /**
  * Resolve the source partner exclusively from the authenticated CRM session
@@ -345,6 +346,22 @@ export async function createPropertyController(c: Context<AppEnv>) {
         action: 'CREATED',
         description: 'Listing created',
       },
+    })
+
+    const { diffs: propertyDiffs, summary: propertySummary } = computeEntityDiff(null, {
+      societyBuildingName: newProperty.societyBuildingName,
+      locationArea: newProperty.locationArea,
+      propertyType: newProperty.propertyType,
+      askingPrice: newProperty.askingPrice,
+      availabilityStatus: newProperty.availabilityStatus,
+    })
+    await logAudit(c, {
+      action: 'CREATE',
+      module: 'PROPERTIES',
+      resourceId: newProperty.id,
+      resourceName: newProperty.societyBuildingName || 'Property Listing',
+      details: `Added new property '${newProperty.societyBuildingName || 'Listing'}' in ${newProperty.locationArea} (${propertySummary})`,
+      changes: propertyDiffs,
     })
 
     const finalProperty = await prisma.property.findUnique({
@@ -906,6 +923,18 @@ export async function updatePropertyController(c: Context<AppEnv>) {
       },
     })
 
+    const { diffs: updateDiffs, summary: updateSummary } = computeEntityDiff(existing, updated)
+    if (updateDiffs.length > 0) {
+      await logAudit(c, {
+        action: 'UPDATE',
+        module: 'PROPERTIES',
+        resourceId: updated.id,
+        resourceName: updated.societyBuildingName || 'Property Listing',
+        details: `Updated property '${updated.societyBuildingName || 'Listing'}': ${updateSummary}`,
+        changes: updateDiffs,
+      })
+    }
+
     return c.json({
       success: true,
       message: 'Property updated successfully.',
@@ -974,6 +1003,22 @@ export async function updatePropertyStatusController(c: Context<AppEnv>) {
           note: body.note,
         },
       },
+    })
+
+    await logAudit(c, {
+      action: 'UPDATE_STATUS',
+      module: 'PROPERTIES',
+      resourceId: updated.id,
+      resourceName: updated.societyBuildingName || 'Property Listing',
+      details: `Status changed from '${existing.availabilityStatus}' to '${body.availabilityStatus}'${body.note ? ` (${body.note})` : ''}`,
+      changes: [
+        {
+          field: 'availabilityStatus',
+          label: 'Availability Status',
+          from: existing.availabilityStatus,
+          to: body.availabilityStatus,
+        },
+      ],
     })
 
     return c.json({
@@ -1441,6 +1486,14 @@ export async function deletePropertyController(c: Context<AppEnv>) {
     // 2. Delete Property from PostgreSQL (Cascade deletes media and audit logs in DB)
     await prisma.property.delete({
       where: { id },
+    })
+
+    await logAudit(c, {
+      action: 'DELETE',
+      module: 'PROPERTIES',
+      resourceId: property.id,
+      resourceName: property.societyBuildingName || 'Property Listing',
+      details: `Deleted property '${property.societyBuildingName || 'Listing'}' in ${property.locationArea}`,
     })
 
     return c.json({

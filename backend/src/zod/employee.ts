@@ -5,6 +5,8 @@ export const moduleAccessSchema = z.object({
   clients: z.enum(['NONE', 'VIEW', 'FULL']).default('VIEW'),
   brokers: z.enum(['NONE', 'VIEW', 'FULL']).default('VIEW'),
   owners: z.enum(['NONE', 'VIEW', 'FULL']).default('VIEW'),
+  users: z.enum(['NONE', 'VIEW', 'FULL']).default('NONE'),
+  tasks: z.enum(['NONE', 'VIEW', 'FULL']).default('FULL'),
   finance: z.enum(['NONE', 'VIEW', 'FULL']).default('NONE'),
   canViewSensitiveDocs: z.boolean().default(false),
 })

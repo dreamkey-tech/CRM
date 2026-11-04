@@ -37,7 +37,7 @@ function getSessionCookieOptions(c: Context<AppEnv>) {
  * 1. Initiate Google Login
  * Endpoint: POST /api/auth/sign-in/social
  */
-function isAllowedRedirectUrl(urlStr: string, c: Context<AppEnv>): boolean {
+export function isAllowedRedirectUrl(urlStr: string, c: Context<AppEnv>): boolean {
   try {
     const parsed = new URL(urlStr)
     const hostname = parsed.hostname.toLowerCase()
@@ -224,7 +224,11 @@ export const oauthGoogleCallbackController = async (c: Context<AppEnv>) => {
     return c.redirect(`${errorCallbackURL}?error=oauth_token_exchange_failed`)
   }
 
-  const tokenData = (await tokenRes.json()) as { access_token: string }
+  const tokenData = (await tokenRes.json()) as {
+    access_token: string
+    refresh_token?: string
+    expires_in?: number
+  }
 
   // Step B: Fetch user profile info from Google (ignoring avatar/image)
   const profileRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
@@ -244,6 +248,47 @@ export const oauthGoogleCallbackController = async (c: Context<AppEnv>) => {
 
   const normalizedEmail = profile.email.toLowerCase().trim()
   const now = new Date()
+
+  // Step B.1: Check if OAuth was initiated for Organization Google Calendar Sync
+  let parsedStatePurpose = ''
+  try {
+    if (state) {
+      const parsed = JSON.parse(atob(state))
+      parsedStatePurpose = parsed.purpose || ''
+    }
+  } catch {}
+
+  if (parsedStatePurpose === 'CALENDAR_SYNC') {
+    await prisma.organizationCalendarConfig.upsert({
+      where: { id: 'dreamkey-master' },
+      update: {
+        connectedEmail: normalizedEmail,
+        ...(tokenData.refresh_token ? { refreshToken: tokenData.refresh_token } : {}),
+        accessToken: tokenData.access_token,
+        tokenExpiry: tokenData.expires_in
+          ? new Date(Date.now() + (tokenData.expires_in - 60) * 1000)
+          : null,
+        syncEnabled: true,
+        lastSyncedAt: new Date(),
+      },
+      create: {
+        id: 'dreamkey-master',
+        connectedEmail: normalizedEmail,
+        refreshToken: tokenData.refresh_token || null,
+        accessToken: tokenData.access_token,
+        tokenExpiry: tokenData.expires_in
+          ? new Date(Date.now() + (tokenData.expires_in - 60) * 1000)
+          : null,
+        syncEnabled: true,
+        masterFeedToken: crypto.randomUUID(),
+        lastSyncedAt: new Date(),
+      },
+    })
+
+    return c.redirect(
+      `${callbackURL}?googleSync=connected&email=${encodeURIComponent(normalizedEmail)}`
+    )
+  }
 
   // Step C: Upsert User in Database & Handle account linking
   let user = await prisma.websiteUser.findUnique({

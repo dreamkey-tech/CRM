@@ -2,6 +2,8 @@ import { createMiddleware } from 'hono/factory'
 import { getCookie, deleteCookie } from 'hono/cookie'
 import type { AppEnv, AuthUser } from '../db'
 import { AUTH_COOKIE_NAME } from '../lib/auth'
+import { logAudit } from '../lib/audit'
+import { createNotification } from '../lib/notifications'
 
 /**
  * Authentication Middleware
@@ -182,6 +184,14 @@ export function getHumanReadablePermissionDescription(permission: string): strin
     'owners:create': 'add property owners',
     'owners:update': 'edit property owners',
     'owners:delete': 'delete property owners',
+    'users:read': 'view website users & enquiries',
+    'users:create': 'create website users & enquiries',
+    'users:update': 'update website user accounts & enquiries',
+    'users:delete': 'delete website users & enquiries',
+    'tasks:read': 'view task schedules & queues',
+    'tasks:create': 'create tasks',
+    'tasks:update': 'update tasks',
+    'tasks:delete': 'delete tasks',
     'finance:read': 'view financial ledgers & reports',
     'finance:manage': 'manage financial transactions',
     'employees:read': 'view staff members & organization access',
@@ -222,12 +232,77 @@ export function requirePermission(requiredPermission: string) {
 
     if (!hasAccess) {
       const featureDesc = getHumanReadablePermissionDescription(requiredPermission)
+      const moduleName = requiredPermission.split(':')[0].toUpperCase()
+      await logAudit(c, {
+        action: 'ACCESS_DENIED',
+        module: moduleName,
+        resourceName: requiredPermission,
+        details: `Unauthorized attempt to ${featureDesc} (blocked: lacks '${requiredPermission}')`,
+        status: 'DENIED',
+      })
+      await createNotification(c.get('prisma'), {
+        requiredPermission: 'audit:read',
+        type: 'SECURITY_ALERT',
+        title: 'Unauthorized Access Blocked',
+        message: `${c.get('user')?.name || 'A user'} was blocked from trying to ${featureDesc}.`,
+        link: '/dashboard/organization?tab=audit',
+        metadata: { requiredPermission, userId: c.get('user')?.id },
+      })
       return c.json(
         {
           success: false,
           error: `You do not have permission to ${featureDesc}. Please contact your CRM administrator if you need access.`,
           code: 'PERMISSION_DENIED',
           requiredPermission,
+        },
+        403
+      )
+    }
+
+    await next()
+  })
+}
+
+/**
+ * Permission Guard Middleware (Multiple Permissions - Any Match)
+ * Ensures the authenticated user has at least one of the listed permissions (or Super Admin `*:*`).
+ */
+export function requireAnyPermission(requiredPermissions: string[]) {
+  return createMiddleware<AppEnv>(async (c, next) => {
+    const userPermissions = c.get('permissions') || []
+
+    const hasAccess =
+      userPermissions.includes('*:*') ||
+      requiredPermissions.some((p) => userPermissions.includes(p))
+
+    if (!hasAccess) {
+      const primary = requiredPermissions[0]
+      const featureDesc = getHumanReadablePermissionDescription(primary)
+      const moduleName = primary.split(':')[0].toUpperCase()
+
+      await logAudit(c, {
+        action: 'ACCESS_DENIED',
+        module: moduleName,
+        resourceName: requiredPermissions.join(' | '),
+        details: `Unauthorized attempt to ${featureDesc} (blocked: lacks any of [${requiredPermissions.join(', ')}])`,
+        status: 'DENIED',
+      })
+
+      await createNotification(c.get('prisma'), {
+        requiredPermission: 'audit:read',
+        type: 'SECURITY_ALERT',
+        title: 'Unauthorized Access Blocked',
+        message: `${c.get('user')?.name || 'A user'} was blocked from trying to ${featureDesc}.`,
+        link: '/dashboard/organization?tab=audit',
+        metadata: { requiredPermissions, userId: c.get('user')?.id },
+      })
+
+      return c.json(
+        {
+          success: false,
+          error: `You do not have permission to ${featureDesc}. Please contact your CRM administrator if you need access.`,
+          code: 'PERMISSION_DENIED',
+          requiredPermissions,
         },
         403
       )

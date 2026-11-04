@@ -918,17 +918,13 @@ export function PropertyFormModal({
               {!initialProperty && (
                 <div className="p-3 bg-gradient-to-r from-gold/15 via-gold/5 to-surface-secondary border border-gold/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <div className="w-8 h-8 rounded-xs bg-gold/20 border border-gold/40 flex items-center justify-center text-gold shrink-0">
-                      <Sparkles className="w-4 h-4" />
-                    </div>
+                   
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-[11px] font-bold uppercase tracking-wider text-foreground">
                           Pre-Fill From Existing Society
                         </span>
-                        <span className="text-[8px] font-bold uppercase px-1.5 py-0.5 bg-gold text-black font-mono">
-                          Quick Fill
-                        </span>
+                      
                       </div>
                       <p className="text-[10px] text-muted-text truncate">
                         {prefilledSociety

@@ -5,6 +5,7 @@ import { Users, Plus, Search, RefreshCw, Edit2, Trash2, ChevronLeft, ChevronRigh
 import Link from 'next/link'
 import { useAuthStore } from '../../store/useAuthStore'
 import { clientListKey, useClientStore } from '../../store/useClientStore'
+import { useRefreshStore } from '../../store/useRefreshStore'
 import { useDebounce } from '../../utils/useDebounce'
 import { deleteClient } from '../../api/clients'
 import { toast } from '../../utils/toast'
@@ -36,6 +37,8 @@ function ClientsDirectory({ linkedId, linkedTab }: { linkedId: string | null; li
   }, [loadList, query, version, userId, hasPermission])
   useEffect(() => { if (userId && hasPermission('clients:read')) void loadStats().catch(() => { }) }, [loadStats, version, userId, hasPermission])
   const refresh = () => { void loadList(query, true).catch(() => { }); void loadStats(true).catch(() => { }) }
+  const refreshTick = useRefreshStore(state => state.refreshTick)
+  useEffect(() => { if (refreshTick > 0) refresh() }, [refreshTick])
   const actions = (client: Client) => (
     <div className="flex gap-1">
       <button

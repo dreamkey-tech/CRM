@@ -10,6 +10,7 @@ import {
   AUTH_COOKIE_NAME,
 } from '../lib/auth'
 import { seedSystemDefaults } from '../lib/seed'
+import { logAudit } from '../lib/audit'
 
 /**
  * Register a new user
@@ -185,6 +186,13 @@ export const loginController = async (c: Context<AppEnv>) => {
   })
 
   if (!user) {
+    await logAudit(c, {
+      action: 'LOGIN_FAILED',
+      module: 'AUTH',
+      resourceName: body.email,
+      details: `Failed sign-in attempt: account not found (${body.email})`,
+      status: 'DENIED',
+    })
     return c.json(
       {
         success: false,
@@ -196,6 +204,14 @@ export const loginController = async (c: Context<AppEnv>) => {
   }
 
   if (!user.isActive) {
+    await logAudit(c, {
+      action: 'LOGIN_BLOCKED',
+      module: 'AUTH',
+      userId: user.id,
+      resourceName: user.name || user.email,
+      details: `Blocked sign-in attempt on deactivated account (${user.email})`,
+      status: 'DENIED',
+    })
     return c.json(
       {
         success: false,
@@ -208,6 +224,14 @@ export const loginController = async (c: Context<AppEnv>) => {
 
   const isValidPassword = await verifyPassword(body.password, user.passwordHash)
   if (!isValidPassword) {
+    await logAudit(c, {
+      action: 'LOGIN_FAILED',
+      module: 'AUTH',
+      userId: user.id,
+      resourceName: user.name || user.email,
+      details: `Failed sign-in attempt: incorrect password (${user.email})`,
+      status: 'DENIED',
+    })
     return c.json(
       {
         success: false,
@@ -245,6 +269,15 @@ export const loginController = async (c: Context<AppEnv>) => {
     secure: cookieOpts.secure,
     sameSite: cookieOpts.sameSite,
     maxAge: cookieOpts.maxAge,
+  })
+
+  await logAudit(c, {
+    action: 'LOGIN',
+    module: 'AUTH',
+    userId: user.id,
+    resourceId: user.id,
+    resourceName: user.name || user.email,
+    details: 'Signed in successfully',
   })
 
   const roles = user.roles.map((ur) => ur.role.name)
@@ -305,12 +338,24 @@ export const getMeController = async (c: Context<AppEnv>) => {
  */
 export const logoutController = async (c: Context<AppEnv>) => {
   const prisma = c.get('prisma')
+  const user = c.get('user')
   let token = getCookie(c, AUTH_COOKIE_NAME)
   if (!token) {
     const authHeader = c.req.header('authorization')
     if (authHeader?.startsWith('Bearer ')) {
       token = authHeader.slice(7).trim()
     }
+  }
+
+  if (user) {
+    await logAudit(c, {
+      action: 'LOGOUT',
+      module: 'AUTH',
+      userId: user.id,
+      resourceId: user.id,
+      resourceName: user.name || user.email,
+      details: 'Signed out successfully',
+    })
   }
 
   if (token) {
