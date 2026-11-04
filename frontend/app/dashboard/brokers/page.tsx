@@ -3,6 +3,8 @@ import { DashboardHeader } from '../../../components/dashboard/DashboardHeader'
 import { BrokersView } from '../../../components/brokers/BrokersView'
 import { TableSkeleton } from '../../../components/ui/PageSkeleton'
 
+export const runtime = 'edge'
+
 export default function BrokersPage() {
   return (
     <div className="min-h-screen bg-background text-foreground">

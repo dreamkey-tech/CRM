@@ -4,6 +4,8 @@ import { DashboardHeader } from '../../../components/dashboard/DashboardHeader'
 import { OrganizationView } from '../../../components/organization/OrganizationView'
 import { TableSkeleton } from '../../../components/ui/PageSkeleton'
 
+export const runtime = 'edge'
+
 export const metadata: Metadata = {
   title: 'Organization — Employees & Audit Logs | DreamKey CRM',
   description: 'Manage employees, configure role permissions, and view system audit trails.',

@@ -1,3 +1,5 @@
+export const runtime = 'edge'
+
 import type { Metadata, Viewport } from 'next'
 import { PublicPropertyPage, DreamKeyPublicFooter } from '../../../components/clients/PublicPropertyPage'
 import type { PublicPropertyShare } from '../../../types/client'
