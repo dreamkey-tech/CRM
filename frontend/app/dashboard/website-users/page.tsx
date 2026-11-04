@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { WebsiteUsersView } from '../../../components/website-users/WebsiteUsersView'
 
-export const runtime = 'edge'
 
 export const metadata: Metadata = {
   title: 'User Management | DreamKey CRM',

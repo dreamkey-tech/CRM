@@ -1,7 +1,6 @@
 import type { Metadata } from 'next'
 import { DashboardView } from '../../components/dashboard/DashboardView'
 
-export const runtime = 'edge'
 
 export const metadata: Metadata = {
   title: 'Dashboard | DreamKey CRM',

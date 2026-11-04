@@ -3,7 +3,6 @@ import { DashboardHeader } from '../../../components/dashboard/DashboardHeader'
 import { PropertiesView } from '../../../components/properties/PropertiesView'
 import { TableSkeleton } from '../../../components/ui/PageSkeleton'
 
-export const runtime = 'edge'
 
 export default function PropertiesPage() {
   return (

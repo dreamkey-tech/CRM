@@ -3,7 +3,6 @@ import { DashboardHeader } from '../../../components/dashboard/DashboardHeader'
 import { TasksView } from '../../../components/tasks/TasksView'
 import { TableSkeleton } from '../../../components/ui/PageSkeleton'
 
-export const runtime = 'edge'
 
 export default function TasksPage() {
   return (

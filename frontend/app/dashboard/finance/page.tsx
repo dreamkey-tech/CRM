@@ -3,7 +3,6 @@ import { DashboardHeader } from '../../../components/dashboard/DashboardHeader'
 import { FinanceView } from '../../../components/finance/FinanceView'
 import { TableSkeleton } from '../../../components/ui/PageSkeleton'
 
-export const runtime = 'edge'
 
 export const metadata = {
   title: 'Finance & Revenue Ledger | DreamKey CRM',

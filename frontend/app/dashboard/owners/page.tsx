@@ -3,7 +3,6 @@ import { DashboardHeader } from '../../../components/dashboard/DashboardHeader'
 import { OwnersView } from '../../../components/owners/OwnersView'
 import { TableSkeleton } from '../../../components/ui/PageSkeleton'
 
-export const runtime = 'edge'
 
 export default function OwnersPage() {
   return (

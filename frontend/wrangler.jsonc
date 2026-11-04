@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "dreamkey-crm-frontend",
+  "main": ".open-next/worker.js",
+  "compatibility_date": "2026-11-04",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": ".open-next/assets",
+    "binding": "ASSETS"
+  }
+  // Add env vars here or in Cloudflare Dashboard > Workers & Pages > Settings > Variables
+  // "vars": {
+  //   "API_URL": "https://backend.dreamkey-crm.workers.dev"
+  // }
+}
