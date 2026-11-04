@@ -535,6 +535,7 @@ model Property {
   @@index([isArchived])
   @@index([showInWebsite])
   @@index([isBestProperty])
+  @@index([createdAt])
   @@map("properties")
 }
 

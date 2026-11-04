@@ -5,6 +5,7 @@ import { AppError } from '../lib/errors'
 import { directoryInclude, partnerSelect, validateContactPartner, linkedPropertiesController } from '../lib/directory'
 import { ownerQuerySchema, type CreateOwnerInput, type UpdateOwnerInput } from '../zod/owner'
 import { logAudit, computeEntityDiff } from '../lib/audit'
+import { cache } from '../lib/cache'
 
 const ownerInclude = { ...directoryInclude, createdBy: { select: partnerSelect } } as const
 const optionalFields = ['email', 'whatsappNumber', 'address', 'notes'] as const
@@ -37,6 +38,9 @@ export async function createOwnerController(c: Context<AppEnv>) {
     details: `Added new property owner '${owner.name}' (${owner.phone})${summary ? ` | ${summary}` : ''}`,
     changes: diffs,
   })
+
+  await cache.deletePrefix('owners:stats')
+  await cache.deletePrefix('dashboard:overview')
 
   return c.json({ success: true, message: 'Owner added to the directory.', owner }, 201)
 }
@@ -82,6 +86,9 @@ export async function updateOwnerController(c: Context<AppEnv>) {
     })
   }
 
+  await cache.deletePrefix('owners:stats')
+  await cache.deletePrefix('dashboard:overview')
+
   return c.json({ success: true, message: 'Owner details saved.', owner })
 }
 
@@ -99,16 +106,56 @@ export async function deleteOwnerController(c: Context<AppEnv>) {
     details: `Deleted owner '${existingOwner.name}' (${existingOwner.phone})`,
   })
 
+  await cache.deletePrefix('owners:stats')
+  await cache.deletePrefix('dashboard:overview')
+
   return c.json({ success: true, message: 'Owner removed. Linked properties have been kept and unlinked.' })
 }
 
 export async function getOwnerStatsController(c: Context<AppEnv>) {
   const prisma = c.get('prisma'), user = c.get('user')!
-  const [totalOwners, activeOwners, inactiveOwners, myOwnersCount] = await Promise.all([
-    prisma.owner.count(), prisma.owner.count({ where: { status: 'ACTIVE' } }), prisma.owner.count({ where: { status: 'INACTIVE' } }),
-    prisma.owner.count({ where: { primaryContactPartnerId: user.id } }),
-  ])
-  return c.json({ success: true, stats: { totalOwners, activeOwners, inactiveOwners, myOwnersCount } })
+  const cacheKey = `owners:stats:${user.id}`
+  const cached = await cache.get<any>(cacheKey)
+  if (cached) {
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return c.json({ success: true, stats: cached })
+  }
+
+  let stats = { totalOwners: 0, activeOwners: 0, inactiveOwners: 0, myOwnersCount: 0 }
+  try {
+    if (typeof (prisma as any).$queryRaw === 'function') {
+      const rows: any[] = await (prisma as any).$queryRaw`
+        SELECT 
+          count(*)::int AS "totalOwners",
+          count(*) FILTER (WHERE status = 'ACTIVE')::int AS "activeOwners",
+          count(*) FILTER (WHERE status = 'INACTIVE')::int AS "inactiveOwners",
+          count(*) FILTER (WHERE "primaryContactPartnerId" = ${user.id})::int AS "myOwnersCount"
+        FROM owners
+      `
+      stats = {
+        totalOwners: rows[0]?.totalOwners || 0,
+        activeOwners: rows[0]?.activeOwners || 0,
+        inactiveOwners: rows[0]?.inactiveOwners || 0,
+        myOwnersCount: rows[0]?.myOwnersCount || 0,
+      }
+    } else {
+      const [totalOwners, activeOwners, inactiveOwners, myOwnersCount] = await Promise.all([
+        prisma.owner.count(),
+        prisma.owner.count({ where: { status: 'ACTIVE' } }),
+        prisma.owner.count({ where: { status: 'INACTIVE' } }),
+        prisma.owner.count({ where: { primaryContactPartnerId: user.id } }),
+      ])
+      stats = { totalOwners, activeOwners, inactiveOwners, myOwnersCount }
+    }
+
+    await cache.set(cacheKey, stats, 60_000)
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return c.json({ success: true, stats })
+  } catch (err: any) {
+    console.warn('[getOwnerStatsController] DB query failed, using fallback:', err?.message || err)
+    const fallback = cache.getLatest<any>(cacheKey) || stats
+    return c.json({ success: true, stats: fallback, isFallback: true })
+  }
 }
 
 export const getOwnerPropertiesController = linkedPropertiesController('owner')

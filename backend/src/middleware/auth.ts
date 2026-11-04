@@ -4,10 +4,19 @@ import type { AppEnv, AuthUser } from '../db'
 import { AUTH_COOKIE_NAME } from '../lib/auth'
 import { logAudit } from '../lib/audit'
 import { createNotification } from '../lib/notifications'
+import { cache } from '../lib/cache'
+
+interface CachedSessionData {
+  authUser: AuthUser
+  roles: string[]
+  permissions: string[]
+  sessionId: string
+  expiresAtMs: number
+}
 
 /**
  * Authentication Middleware
- * Validates the HttpOnly `auth_session` cookie against the PostgreSQL session table.
+ * Validates the HttpOnly `auth_session` cookie against the PostgreSQL session table (with 60s memory caching).
  * Attaches `user`, `roles`, and compiled `permissions` to Hono context `c.var`.
  */
 export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
@@ -22,6 +31,18 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
       },
       401
     )
+  }
+
+  const cacheKey = `auth_session:${token}`
+  const cached = await cache.get<CachedSessionData>(cacheKey)
+
+  if (cached && cached.expiresAtMs > Date.now()) {
+    c.set('user', cached.authUser)
+    c.set('roles', cached.roles)
+    c.set('permissions', cached.permissions)
+    c.set('sessionId', cached.sessionId)
+    await next()
+    return
   }
 
   const prisma = c.get('prisma')
@@ -52,6 +73,7 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
 
   // Validate session exists, is not expired, and user is active
   if (!session || session.expiresAt < new Date()) {
+    await cache.delete(cacheKey)
     deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' })
     return c.json(
       {
@@ -64,6 +86,7 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
   }
 
   if (!session.user.isActive) {
+    await cache.delete(cacheKey)
     deleteCookie(c, AUTH_COOKIE_NAME, { path: '/' })
     return c.json(
       {
@@ -93,6 +116,18 @@ export const authMiddleware = createMiddleware<AppEnv>(async (c, next) => {
     }
   }
   const permissions = Array.from(permissionsSet)
+
+  // Cache session data for up to 60 seconds (or until actual expiry)
+  const ttl = Math.min(60_000, Math.max(0, session.expiresAt.getTime() - Date.now()))
+  if (ttl > 0) {
+    await cache.set<CachedSessionData>(cacheKey, {
+      authUser,
+      roles,
+      permissions,
+      sessionId: session.id,
+      expiresAtMs: session.expiresAt.getTime(),
+    }, ttl)
+  }
 
   // Attach to Hono context
   c.set('user', authUser)

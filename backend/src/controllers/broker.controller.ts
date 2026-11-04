@@ -6,6 +6,7 @@ import { brokerQuerySchema } from '../zod/broker'
 import { AppError } from '../lib/errors'
 import { BrokerStatus } from '@prisma/client'
 import { logAudit, computeEntityDiff } from '../lib/audit'
+import { cache } from '../lib/cache'
 
 /**
  * Helper to clean empty string values into null for optional DB columns
@@ -79,6 +80,9 @@ export const createBrokerController = async (c: Context<AppEnv>) => {
       changes: diffs,
     })
 
+    await cache.deletePrefix('brokers:stats')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json(
       {
         success: true,
@@ -101,73 +105,115 @@ export const getBrokerStatsController = async (c: Context<AppEnv>) => {
   const prisma = c.get('prisma')
   const authUser = c.get('user')
 
+  const cacheKey = `brokers:stats:${authUser?.id || 'all'}`
+  const cached = await cache.get<any>(cacheKey)
+  if (cached) {
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return c.json({ success: true, stats: cached })
+  }
+
   const now = new Date()
   const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
-  const [
-    totalBrokers,
-    activeBrokers,
-    inactiveBrokers,
-    blockedBrokers,
-    newBrokersToday,
-    newBrokersThisWeek,
-    newBrokersThisMonth,
-    myBrokersCount,
-  ] = await Promise.all([
-    prisma.broker.count(),
-    prisma.broker.count({ where: { status: BrokerStatus.ACTIVE } }),
-    prisma.broker.count({ where: { status: BrokerStatus.INACTIVE } }),
-    prisma.broker.count({ where: { status: BrokerStatus.BLOCKED } }),
-    prisma.broker.count({ where: { createdAt: { gte: startOfToday } } }),
-    prisma.broker.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
-    prisma.broker.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
-    authUser?.id
-      ? prisma.broker.count({ where: { primaryContactPartnerId: authUser.id } })
-      : Promise.resolve(0),
-  ])
+  let stats: any = {
+    totalBrokers: 0,
+    activeBrokers: 0,
+    inactiveBrokers: 0,
+    blockedBrokers: 0,
+    myBrokersCount: 0,
+    newBrokersToday: 0,
+    newBrokersThisWeek: 0,
+    newBrokersThisMonth: 0,
+    topAreas: [],
+  }
 
-  // Aggregate areas of operation
-  const areasWithCount = await prisma.broker.groupBy({
-    by: ['areaOfOperation'],
-    where: {
-      areaOfOperation: {
-        not: null,
-      },
-    },
-    _count: {
-      id: true,
-    },
-    orderBy: {
-      _count: {
-        id: 'desc',
-      },
-    },
-    take: 5,
-  })
+  try {
+    if (typeof (prisma as any).$queryRaw === 'function') {
+      const [countRows, areaRows] = await Promise.all([
+        (prisma as any).$queryRaw`
+          SELECT
+            COUNT(*)::int AS "totalBrokers",
+            COUNT(*) FILTER (WHERE status = 'ACTIVE')::int AS "activeBrokers",
+            COUNT(*) FILTER (WHERE status = 'INACTIVE')::int AS "inactiveBrokers",
+            COUNT(*) FILTER (WHERE status = 'BLOCKED')::int AS "blockedBrokers",
+            COUNT(*) FILTER (WHERE "createdAt" >= ${startOfToday})::int AS "newBrokersToday",
+            COUNT(*) FILTER (WHERE "createdAt" >= ${sevenDaysAgo})::int AS "newBrokersThisWeek",
+            COUNT(*) FILTER (WHERE "createdAt" >= ${thirtyDaysAgo})::int AS "newBrokersThisMonth",
+            COUNT(*) FILTER (WHERE "primaryContactPartnerId" = ${authUser?.id || null})::int AS "myBrokersCount"
+          FROM brokers
+        `,
+        (prisma as any).$queryRaw`
+          SELECT "areaOfOperation" AS "area", COUNT(*)::int AS "count"
+          FROM brokers
+          WHERE "areaOfOperation" IS NOT NULL
+          GROUP BY "areaOfOperation"
+          ORDER BY "count" DESC
+          LIMIT 5
+        `,
+      ])
 
-  const topAreas = areasWithCount
-    .filter((a) => a.areaOfOperation)
-    .map((a) => ({
-      area: a.areaOfOperation as string,
-      count: a._count.id,
-    }))
+      const counts = countRows[0] || {}
+      stats = {
+        totalBrokers: counts.totalBrokers || 0,
+        activeBrokers: counts.activeBrokers || 0,
+        inactiveBrokers: counts.inactiveBrokers || 0,
+        blockedBrokers: counts.blockedBrokers || 0,
+        myBrokersCount: counts.myBrokersCount || 0,
+        newBrokersToday: counts.newBrokersToday || 0,
+        newBrokersThisWeek: counts.newBrokersThisWeek || 0,
+        newBrokersThisMonth: counts.newBrokersThisMonth || 0,
+        topAreas: areaRows.map((a: any) => ({ area: a.area, count: a.count })),
+      }
+    } else {
+      const [
+        totalBrokers, activeBrokers, inactiveBrokers, blockedBrokers,
+        newBrokersToday, newBrokersThisWeek, newBrokersThisMonth, myBrokersCount,
+      ] = await Promise.all([
+        prisma.broker.count(),
+        prisma.broker.count({ where: { status: BrokerStatus.ACTIVE } }),
+        prisma.broker.count({ where: { status: BrokerStatus.INACTIVE } }),
+        prisma.broker.count({ where: { status: BrokerStatus.BLOCKED } }),
+        prisma.broker.count({ where: { createdAt: { gte: startOfToday } } }),
+        prisma.broker.count({ where: { createdAt: { gte: sevenDaysAgo } } }),
+        prisma.broker.count({ where: { createdAt: { gte: thirtyDaysAgo } } }),
+        authUser?.id
+          ? prisma.broker.count({ where: { primaryContactPartnerId: authUser.id } })
+          : Promise.resolve(0),
+      ])
 
-  return c.json({
-    success: true,
-    stats: {
-      totalBrokers,
-      activeBrokers,
-      inactiveBrokers,
-      blockedBrokers,
-      myBrokersCount,
-      newBrokersToday,
-      newBrokersThisWeek,
-      newBrokersThisMonth,
-      topAreas,
-    },
-  })
+      const areasWithCount = await prisma.broker.groupBy({
+        by: ['areaOfOperation'],
+        where: { areaOfOperation: { not: null } },
+        _count: { id: true },
+        orderBy: { _count: { id: 'desc' } },
+        take: 5,
+      })
+
+      const topAreas = areasWithCount
+        .filter((a) => a.areaOfOperation)
+        .map((a) => ({ area: a.areaOfOperation as string, count: a._count.id }))
+
+      stats = {
+        totalBrokers, activeBrokers, inactiveBrokers, blockedBrokers,
+        myBrokersCount, newBrokersToday, newBrokersThisWeek, newBrokersThisMonth,
+        topAreas,
+      }
+    }
+
+    await cache.set(cacheKey, stats, 60_000)
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+
+    return c.json({
+      success: true,
+      stats,
+    })
+  } catch (err: any) {
+    console.warn('[getBrokerStatsController] DB query failed, using fallback:', err?.message || err)
+    const fallback = cache.getLatest<any>(cacheKey) || stats
+    return c.json({ success: true, stats: fallback, isFallback: true })
+  }
 }
 
 /**
@@ -335,6 +381,9 @@ export const updateBrokerController = async (c: Context<AppEnv>) => {
     })
   }
 
+  await cache.deletePrefix('brokers:stats')
+  await cache.deletePrefix('dashboard:overview')
+
   return c.json({
     success: true,
     message: 'Broker information updated successfully.',
@@ -376,6 +425,9 @@ export const deleteBrokerController = async (c: Context<AppEnv>) => {
     resourceName: existingBroker.name,
     details: `Deleted broker '${existingBroker.name}' (${existingBroker.phone || 'No phone'})`,
   })
+
+  await cache.deletePrefix('brokers:stats')
+  await cache.deletePrefix('dashboard:overview')
 
   return c.json({
     success: true,

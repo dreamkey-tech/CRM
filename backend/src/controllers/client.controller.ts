@@ -12,6 +12,7 @@ import dreamkey from '../../../frontend/config/dreamkey-public.json'
 import { getClientDocumentRule } from '../config/media-config'
 import { logAudit, computeEntityDiff } from '../lib/audit'
 import { createNotification } from '../lib/notifications'
+import { cache } from '../lib/cache'
 
 const clientInclude = {
   createdBy: { select: partnerSelect },
@@ -125,6 +126,9 @@ export async function createClientController(c: Context<AppEnv>) {
     }
   }
 
+  await cache.deletePrefix('clients:stats')
+  await cache.deletePrefix('dashboard:overview')
+
   return c.json({ success: true, client, message: 'Client added.' }, 201)
 }
 export async function listClientsController(c: Context<AppEnv>) {
@@ -140,8 +144,53 @@ export async function listClientsController(c: Context<AppEnv>) {
 }
 export async function getClientStatsController(c: Context<AppEnv>) {
   const db = c.get('prisma'), user = actor(c)
-  const [totalClients, activeClients, inactiveClients, myClientsCount] = await Promise.all([db.client.count(), db.client.count({ where: { status: 'ACTIVE' } }), db.client.count({ where: { status: 'INACTIVE' } }), db.client.count({ where: { assignedPartners: { some: { partnerId: user.id } } } })])
-  return c.json({ success: true, stats: { totalClients, activeClients, inactiveClients, myClientsCount } })
+  const cacheKey = `clients:stats:${user.id}`
+  const cached = await cache.get<any>(cacheKey)
+  if (cached) {
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return c.json({ success: true, stats: cached })
+  }
+
+  let stats = { totalClients: 0, activeClients: 0, inactiveClients: 0, myClientsCount: 0 }
+  try {
+    if (typeof (db as any).$queryRaw === 'function') {
+      const rows: any[] = await (db as any).$queryRaw`
+        SELECT
+          COUNT(*)::int AS "totalClients",
+          COUNT(*) FILTER (WHERE status = 'ACTIVE')::int AS "activeClients",
+          COUNT(*) FILTER (WHERE status = 'INACTIVE')::int AS "inactiveClients",
+          (
+            SELECT COUNT(*)::int 
+            FROM client_partner_assignments cpa 
+            JOIN clients cl ON cpa."clientId" = cl.id 
+            WHERE cpa."partnerId" = ${user.id} AND cl.status = 'ACTIVE'
+          ) AS "myClientsCount"
+        FROM clients
+      `
+      stats = {
+        totalClients: rows[0]?.totalClients || 0,
+        activeClients: rows[0]?.activeClients || 0,
+        inactiveClients: rows[0]?.inactiveClients || 0,
+        myClientsCount: rows[0]?.myClientsCount || 0,
+      }
+    } else {
+      const [totalClients, activeClients, inactiveClients, myClientsCount] = await Promise.all([
+        db.client.count(),
+        db.client.count({ where: { status: 'ACTIVE' } }),
+        db.client.count({ where: { status: 'INACTIVE' } }),
+        db.client.count({ where: { assignedPartners: { some: { partnerId: user.id } } } }),
+      ])
+      stats = { totalClients, activeClients, inactiveClients, myClientsCount }
+    }
+
+    await cache.set(cacheKey, stats, 60_000)
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return c.json({ success: true, stats })
+  } catch (err: any) {
+    console.warn('[getClientStatsController] DB query failed, using fallback:', err?.message || err)
+    const fallback = cache.getLatest<any>(cacheKey) || stats
+    return c.json({ success: true, stats: fallback, isFallback: true })
+  }
 }
 export async function getClientController(c: Context<AppEnv>) {
   const db = c.get('prisma')
@@ -173,6 +222,9 @@ export async function updateClientController(c: Context<AppEnv>) {
     })
   }
 
+  await cache.deletePrefix('clients:stats')
+  await cache.deletePrefix('dashboard:overview')
+
   return c.json({ success: true, client, message: 'Client details saved.' })
 }
 export async function deleteClientController(c: Context<AppEnv>) {
@@ -188,6 +240,10 @@ export async function deleteClientController(c: Context<AppEnv>) {
     resourceName: existing.name,
     details: `Deleted client '${existing.name}' (${existing.phone})`,
   })
+
+  await cache.deletePrefix('clients:stats')
+  await cache.deletePrefix('dashboard:overview')
+
   return c.json({ success: true, message: 'Client removed. Properties have been kept.' })
 }
 export async function clientPropertyOptionsController(c: Context<AppEnv>) {

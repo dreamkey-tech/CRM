@@ -27,8 +27,17 @@ import { createWebsiteEnquiryController } from './controllers/website-enquiry.co
 import { listBestPropertiesController } from './controllers/website-property.controller'
 import { zValidator } from '@hono/zod-validator'
 import { zodValidationHook } from './lib/validator'
+import { cache } from './lib/cache'
 
 const app = new Hono<AppEnv>()
+
+// Initialize Upstash Redis if configured in Cloudflare environment
+app.use('*', async (c, next) => {
+  if (c.env?.UPSTASH_REDIS_REST_URL && c.env?.UPSTASH_REDIS_REST_TOKEN) {
+    cache.initRedis(c.env.UPSTASH_REDIS_REST_URL, c.env.UPSTASH_REDIS_REST_TOKEN)
+  }
+  await next()
+})
 
 // 1. Global Security Headers Middleware
 app.use('*', async (c, next) => {

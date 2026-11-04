@@ -7,9 +7,9 @@
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
-  }
+  },
   // Add env vars here or in Cloudflare Dashboard > Workers & Pages > Settings > Variables
-  // "vars": {
-  //   "API_URL": "https://backend.dreamkey-crm.workers.dev"
-  // }
+  "vars": {
+    "API_URL": "https://backend.dreamkey-crm.workers.dev"
+  }
 }

@@ -23,6 +23,7 @@ import {
 import { PROPERTY_MEDIA_CONFIG } from '../config/media-config'
 import { Prisma, PrismaClient } from '@prisma/client'
 import { logAudit, computeEntityDiff } from '../lib/audit'
+import { cache } from '../lib/cache'
 
 /**
  * Resolve the source partner exclusively from the authenticated CRM session
@@ -215,6 +216,9 @@ export async function createPropertyDraftController(c: Context<AppEnv>) {
       },
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json(
       {
         success: true,
@@ -364,6 +368,9 @@ export async function createPropertyController(c: Context<AppEnv>) {
       changes: propertyDiffs,
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     const finalProperty = await prisma.property.findUnique({
       where: { id: newProperty.id },
       include: {
@@ -377,6 +384,9 @@ export async function createPropertyController(c: Context<AppEnv>) {
         },
       },
     })
+
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
 
     return c.json(
       {
@@ -405,6 +415,14 @@ export async function createPropertyController(c: Context<AppEnv>) {
 export async function listPropertiesController(c: Context<AppEnv>) {
   const prisma = c.get('prisma')
   const query = c.req.valid('query' as never) as PropertyFilterQuery
+
+  // Check Upstash Redis & Memory Cache
+  const cacheKey = `properties:list:${JSON.stringify(query)}`
+  const cached = await cache.get<any>(cacheKey)
+  if (cached) {
+    c.header?.('Cache-Control', 'private, max-age=15, stale-while-revalidate=30')
+    return c.json(cached)
+  }
 
   const {
     page = 1,
@@ -631,32 +649,34 @@ export async function listPropertiesController(c: Context<AppEnv>) {
     whereConditions.length > 0 ? { AND: whereConditions } : {}
 
   try {
-    const [total, properties, bestPropertiesCount] = await Promise.all([
-      prisma.property.count({ where }),
-      prisma.property.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { [sortBy]: sortOrder },
-        include: {
-          media: {
-            orderBy: { order: 'asc' },
-          },
-          owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
-        broker: {
-            select: { id: true, name: true, phone: true, email: true },
-          },
-          sourcePartner: {
-            select: { id: true, name: true, email: true },
-          },
-        },
-      }),
+    const bestPropertiesCount = await cache.wrap('properties:best_count', 60_000, () =>
       prisma.property.count({
         where: { isBestProperty: true, isArchived: false, isDraft: false },
-      }),
-    ])
+      })
+    )
 
-    return c.json({
+    const total = await prisma.property.count({ where })
+
+    const properties = await prisma.property.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { [sortBy]: sortOrder },
+      include: {
+        media: {
+          orderBy: { order: 'asc' },
+        },
+        owner: { select: { id: true, name: true, phone: true, email: true, whatsappNumber: true, address: true } },
+        broker: {
+          select: { id: true, name: true, phone: true, email: true },
+        },
+        sourcePartner: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    })
+
+    const responsePayload = {
       success: true,
       properties,
       bestPropertiesCount,
@@ -666,7 +686,11 @@ export async function listPropertiesController(c: Context<AppEnv>) {
         total,
         totalPages: Math.ceil(total / limit),
       },
-    })
+    }
+
+    await cache.set(cacheKey, responsePayload, 30_000)
+    c.header?.('Cache-Control', 'private, max-age=15, stale-while-revalidate=30')
+    return c.json(responsePayload)
   } catch (error: any) {
     console.error('Failed to list properties:', error)
     return c.json(
@@ -935,6 +959,9 @@ export async function updatePropertyController(c: Context<AppEnv>) {
       })
     }
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json({
       success: true,
       message: 'Property updated successfully.',
@@ -1020,6 +1047,9 @@ export async function updatePropertyStatusController(c: Context<AppEnv>) {
         },
       ],
     })
+
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
 
     return c.json({
       success: true,
@@ -1133,6 +1163,9 @@ export async function updatePropertyWebsiteSettingsController(c: Context<AppEnv>
       },
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json({
       success: true,
       message: isBestProperty
@@ -1242,6 +1275,9 @@ export async function attachPropertyMediaController(c: Context<AppEnv>) {
       },
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json({
       success: true,
       message: 'Media attached successfully.',
@@ -1313,6 +1349,9 @@ export async function deletePropertyMediaController(c: Context<AppEnv>) {
       },
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json({
       success: true,
       message: 'Media deleted successfully from storage and database.',
@@ -1365,6 +1404,9 @@ export async function reorderPropertyMediaController(c: Context<AppEnv>) {
       where: { propertyId: id },
       orderBy: { order: 'asc' },
     })
+
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
 
     return c.json({
       success: true,
@@ -1428,6 +1470,9 @@ export async function toggleArchivePropertyController(c: Context<AppEnv>) {
         description: `Listing ${nextArchived ? 'archived' : 'restored'}`,
       },
     })
+
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
 
     return c.json({
       success: true,
@@ -1495,6 +1540,9 @@ export async function deletePropertyController(c: Context<AppEnv>) {
       resourceName: property.societyBuildingName || 'Property Listing',
       details: `Deleted property '${property.societyBuildingName || 'Listing'}' in ${property.locationArea}`,
     })
+
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
 
     return c.json({
       success: true,
@@ -1633,6 +1681,9 @@ export async function listPropertyFilterPresetsController(c: Context<AppEnv>) {
       orderBy: [{ isDefault: 'desc' }, { updatedAt: 'desc' }],
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json({
       success: true,
       presets,
@@ -1689,6 +1740,9 @@ export async function createPropertyFilterPresetController(c: Context<AppEnv>) {
       },
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json(
       {
         success: true,
@@ -1740,6 +1794,9 @@ export async function deletePropertyFilterPresetController(c: Context<AppEnv>) {
       where: { id },
     })
 
+    await cache.deletePrefix('properties:')
+    await cache.deletePrefix('dashboard:overview')
+
     return c.json({
       success: true,
       message: 'Filter preset deleted successfully.',
@@ -1763,52 +1820,53 @@ export async function deletePropertyFilterPresetController(c: Context<AppEnv>) {
 export async function getPropertyStatsController(c: Context<AppEnv>) {
   const prisma = c.get('prisma')
 
-  try {
-    const [
-      totalProperties,
-      availableCount,
-      underNegotiationCount,
-      dealDoneCount,
-      directCount,
-      brokerCount,
-      websiteVisibleCount,
-      bestPropertiesCount,
-    ] = await Promise.all([
-      prisma.property.count({ where: { isArchived: false, isDraft: false } }),
-      prisma.property.count({
-        where: { isArchived: false, isDraft: false, availabilityStatus: 'AVAILABLE' },
-      }),
-      prisma.property.count({
-        where: {
-          isArchived: false,
-          isDraft: false,
-          availabilityStatus: { in: ['UNDER_NEGOTIATION', 'TOKEN_PAID'] },
-        },
-      }),
-      prisma.property.count({
-        where: {
-          isArchived: false,
-          isDraft: false,
-          availabilityStatus: { in: ['DEAL_DONE', 'SOLD', 'RENTED_OUT'] },
-        },
-      }),
-      prisma.property.count({
-        where: { isArchived: false, isDraft: false, accessType: 'DIRECT' },
-      }),
-      prisma.property.count({
-        where: { isArchived: false, isDraft: false, accessType: 'BROKER' },
-      }),
-      prisma.property.count({
-        where: { isArchived: false, isDraft: false, showInWebsite: true },
-      }),
-      prisma.property.count({
-        where: { isArchived: false, isDraft: false, isBestProperty: true },
-      }),
-    ])
+  const cacheKey = 'properties:stats'
+  const cached = await cache.get<any>(cacheKey)
+  if (cached) {
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+    return c.json({ success: true, stats: cached })
+  }
 
-    return c.json({
-      success: true,
-      stats: {
+  let stats = {
+    totalProperties: 0,
+    availableCount: 0,
+    underNegotiationCount: 0,
+    dealDoneCount: 0,
+    directCount: 0,
+    brokerCount: 0,
+    websiteVisibleCount: 0,
+    bestPropertiesCount: 0,
+  }
+
+  try {
+    if (typeof (prisma as any).$queryRaw === 'function') {
+      const rows = await (prisma as any).$queryRaw<any[]>`
+        SELECT
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false)::int AS "totalProperties",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "availabilityStatus" = 'AVAILABLE')::int AS "availableCount",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "availabilityStatus" IN ('UNDER_NEGOTIATION', 'TOKEN_PAID'))::int AS "underNegotiationCount",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "availabilityStatus" IN ('DEAL_DONE', 'SOLD', 'RENTED_OUT'))::int AS "dealDoneCount",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "accessType" = 'DIRECT')::int AS "directCount",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "accessType" = 'BROKER')::int AS "brokerCount",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "showInWebsite" = true)::int AS "websiteVisibleCount",
+          COUNT(*) FILTER (WHERE "isArchived" = false AND "isDraft" = false AND "isBestProperty" = true)::int AS "bestPropertiesCount"
+        FROM properties
+      `
+
+      const row = rows[0] || {}
+      stats = {
+        totalProperties: row.totalProperties || 0,
+        availableCount: row.availableCount || 0,
+        underNegotiationCount: row.underNegotiationCount || 0,
+        dealDoneCount: row.dealDoneCount || 0,
+        directCount: row.directCount || 0,
+        brokerCount: row.brokerCount || 0,
+        websiteVisibleCount: row.websiteVisibleCount || 0,
+        bestPropertiesCount: row.bestPropertiesCount || 0,
+      }
+    } else {
+      const baseWhere: any = { isArchived: false, isDraft: false }
+      const [
         totalProperties,
         availableCount,
         underNegotiationCount,
@@ -1817,18 +1875,43 @@ export async function getPropertyStatsController(c: Context<AppEnv>) {
         brokerCount,
         websiteVisibleCount,
         bestPropertiesCount,
-      },
+      ] = await Promise.all([
+        prisma.property.count({ where: baseWhere }),
+        prisma.property.count({ where: { ...baseWhere, availabilityStatus: 'AVAILABLE' } }),
+        prisma.property.count({
+          where: { ...baseWhere, availabilityStatus: { in: ['UNDER_NEGOTIATION', 'TOKEN_PAID'] } },
+        }),
+        prisma.property.count({
+          where: { ...baseWhere, availabilityStatus: { in: ['DEAL_DONE', 'SOLD', 'RENTED_OUT'] } },
+        }),
+        prisma.property.count({ where: { ...baseWhere, accessType: 'DIRECT' } }),
+        prisma.property.count({ where: { ...baseWhere, accessType: 'BROKER' } }),
+        prisma.property.count({ where: { ...baseWhere, showInWebsite: true } }),
+        prisma.property.count({ where: { ...baseWhere, isBestProperty: true } }),
+      ])
+      stats = {
+        totalProperties,
+        availableCount,
+        underNegotiationCount,
+        dealDoneCount,
+        directCount,
+        brokerCount,
+        websiteVisibleCount,
+        bestPropertiesCount,
+      }
+    }
+
+    await cache.set(cacheKey, stats, 60_000)
+    c.header?.('Cache-Control', 'private, max-age=30, stale-while-revalidate=60')
+
+    return c.json({
+      success: true,
+      stats,
     })
   } catch (error: any) {
-    console.error('Failed to calculate property statistics:', error)
-    return c.json(
-      {
-        success: false,
-        error: error.message || 'Failed to calculate property statistics',
-        code: 'STATS_ERROR',
-      },
-      500
-    )
+    console.warn('[getPropertyStatsController] DB query failed, using fallback:', error?.message || error)
+    const fallback = cache.getLatest<any>(cacheKey) || stats
+    return c.json({ success: true, stats: fallback, isFallback: true })
   }
 }
 

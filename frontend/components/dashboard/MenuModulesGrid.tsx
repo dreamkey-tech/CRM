@@ -111,17 +111,7 @@ export function MenuModulesGrid() {
       image: 'Keys to Ownership at Golden Hour.png',
       requiredPermission: 'owners:read',
     },
-    {
-      id: 'organization',
-      title: 'Organization',
-      description: 'Super Admin: manage employee permissions and live system audit logs.',
-      badge: 'Staff & Audit Trails',
-      icon: Shield,
-      image: 'Executive Boardroom Leadership.jpg',
-      href: '/dashboard/organization',
-      requiredPermission: 'employees:manage',
-    },
-    {
+     {
       id: 'finance',
       title: 'Finance',
       description: 'Income, brokerage fees, client advance deposits, and expense ledgers.',
@@ -131,6 +121,8 @@ export function MenuModulesGrid() {
       href: '/dashboard/finance',
       requiredPermission: 'finance:read',
     },
+   
+   
     {
       id: 'tasks',
       title: 'Tasks',
@@ -154,6 +146,16 @@ export function MenuModulesGrid() {
       image: 'user2.png',
       href: '/dashboard/website-users',
       requiredPermission: 'users:read',
+    },
+     {
+      id: 'organization',
+      title: 'Organization',
+      description: 'Super Admin: manage employee permissions and live system audit logs.',
+      badge: 'Staff & Audit Trails',
+      icon: Shield,
+      image: 'Executive Boardroom Leadership.jpg',
+      href: '/dashboard/organization',
+      requiredPermission: 'employees:manage',
     },
   ]
 

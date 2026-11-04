@@ -5,6 +5,8 @@ import { createMiddleware } from 'hono/factory'
 
 export type Bindings = {
   DATABASE_URL: string
+  UPSTASH_REDIS_REST_URL?: string
+  UPSTASH_REDIS_REST_TOKEN?: string
   GOOGLE_CLIENT_ID?: string
   GOOGLE_CLIENT_SECRET?: string
   BACKEND_URL?: string

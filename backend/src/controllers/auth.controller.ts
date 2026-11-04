@@ -333,6 +333,8 @@ export const getMeController = async (c: Context<AppEnv>) => {
   })
 }
 
+import { cache } from '../lib/cache'
+
 /**
  * Logout: Invalidate session in DB and clear HttpOnly cookie
  */
@@ -345,6 +347,10 @@ export const logoutController = async (c: Context<AppEnv>) => {
     if (authHeader?.startsWith('Bearer ')) {
       token = authHeader.slice(7).trim()
     }
+  }
+
+  if (token) {
+    await cache.delete(`auth_session:${token}`)
   }
 
   if (user) {
